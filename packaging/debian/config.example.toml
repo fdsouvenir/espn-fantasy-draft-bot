@@ -1,0 +1,21 @@
+# This file contains routing only. Credentials belong in Secret Service/keyring.
+worker_base = "https://draftside.example.com"
+draft_key = "REPLACE_ME"
+init_file = "~/.config/draftside-companion/draft-init.json"
+draft_url = "https://fantasy.espn.com/football/draft"
+
+[chrome]
+executable = ""
+profile_directory = "~/.local/share/draftside-companion/chrome-profile"
+debug_port = 9222
+launch = true
+reload_on_attach = true
+
+[runtime]
+state_directory = "~/.local/state/draftside-companion"
+reconnect_seconds = 2.0
+heartbeat_seconds = 15.0
+health_stale_seconds = 45.0
+request_timeout_seconds = 10.0
+credential_source = "keyring"
+keyring_service = "draftside-companion"

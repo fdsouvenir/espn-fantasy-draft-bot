@@ -43,3 +43,38 @@ jobs:
       - run: python -m ruff check companion/src companion/tests
       - run: python -m ruff format --check companion/src companion/tests
       - run: python -m pytest companion/tests
+
+  ubuntu-installer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: packaging/debian/test-package.sh
+      - name: Inspect package
+        run: |
+          dpkg-deb --info dist/draftside-companion_0.1.0-1_amd64.deb
+          dpkg-deb --contents dist/draftside-companion_0.1.0-1_amd64.deb
+          sha256sum -c dist/draftside-companion_0.1.0-1_amd64.deb.sha256
+          test "$(find dist -name '*.deb' | wc -l)" -eq 1
+      - name: Install and remove on Ubuntu 24.04
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lintian desktop-file-utils
+          lintian --fail-on error dist/draftside-companion_0.1.0-1_amd64.deb
+          sudo apt-get install -y --no-install-recommends ./dist/draftside-companion_0.1.0-1_amd64.deb
+          desktop-file-validate /usr/share/applications/draftside-companion.desktop
+          systemd-analyze verify /usr/lib/systemd/user/draftside-companion.service
+          draftside-companion --help
+          test_home="$(mktemp -d)"
+          HOME="$test_home" draftside-companion-setup
+          test "$(stat -c '%a' "$test_home/.config/draftside-companion/companion.toml")" = 600
+          sudo apt-get purge -y draftside-companion
+          test -f "$test_home/.config/draftside-companion/companion.toml"
+          test ! -e /usr/bin/draftside-companion
+      - uses: actions/upload-artifact@v4
+        with:
+          name: draftside-companion-ubuntu-24.04-amd64
+          path: |
+            dist/draftside-companion_0.1.0-1_amd64.deb
+            dist/draftside-companion_0.1.0-1_amd64.deb.sha256
+          if-no-files-found: error

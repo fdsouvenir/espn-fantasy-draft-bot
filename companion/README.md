@@ -40,6 +40,42 @@ The companion never needs your ESPN password or cookies. Sign in to ESPN yoursel
 
 ## Install
 
+### Ubuntu 24.04 amd64 package
+
+Download the private release artifact and its checksum, then verify and install it:
+
+```bash
+sha256sum -c draftside-companion_0.1.0-1_amd64.deb.sha256
+sudo apt install ./draftside-companion_0.1.0-1_amd64.deb
+draftside-companion-setup
+```
+
+The package installs the CLI, a GNOME application launcher, a user-level systemd service, the icon, and documentation. It creates no home-directory files during `apt install`, does not start automatically, and contains no league data or credentials.
+
+Private enrollment is interactive so secrets never enter shell history:
+
+```bash
+draftside-companion configure \
+  --worker-base 'https://private-draftside.example.com' \
+  --draft-key 'operator-supplied-draft-key' \
+  --initializer "$HOME/Downloads/draft-init.json"
+```
+
+The command validates and copies the initializer with mode `0600`, writes the non-secret routing config with mode `0600`, creates owner-only state/browser-profile directories, and prompts for the signing key and Cloudflare Access identity through the terminal's hidden-input path. Those values are stored in Ubuntu Secret Service via Python keyring, not TOML.
+
+After enrollment, launch **Draftside Companion** from GNOME or use:
+
+```bash
+draftside-companion preflight
+draftside-companion-service start
+draftside-companion status
+draftside-companion dashboard --open
+```
+
+Stop the user service with `draftside-companion-service stop` before removing the package. `apt remove` and `apt purge` intentionally leave the user's private config, initializer, checkpoint, keyring entries, and dedicated Chrome profile untouched. That prevents an upgrade or accidental uninstall from destroying draft recovery data.
+
+### Source installation
+
 Clone the repository, open a terminal in `companion/`, then create an isolated environment.
 
 ### macOS / Linux
@@ -95,6 +131,8 @@ python -m pip install '.[keyring]'
 ```
 
 Store values under the configured service (default: `draftside-companion`) with usernames matching the three environment-variable names. Use your OS credential manager or a small `getpass`-based setup script so values do not enter shell history. The CLI only reports whether credentials are available; it never prints them.
+
+The Ubuntu `.deb` includes the distro-supported keyring and Secret Service dependencies and uses the interactive `configure` command instead.
 
 ## Draft-night workflow
 

@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
+config_path="${DRAFTSIDE_CONFIG:-${config_home}/draftside-companion/companion.toml}"
+
+exec /usr/bin/python3 -m draft_companion.cli --config "$config_path" "$@"

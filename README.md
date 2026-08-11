@@ -8,7 +8,7 @@ It is deliberately a **copilot, not an autopilot**: Draftside never submits a pi
 
 ![Draftside's live decision desk showing recommendations, player tiers, and roster needs](docs/images/dashboard.png)
 
-> **Project status:** the cloud application and a cross-platform CLI laptop companion are implemented. A signed, one-click desktop distribution still requires laptop-specific packaging and rehearsal; see [Laptop Companion](docs/laptop-companion.md).
+> **Project status:** the cloud application, cross-platform CLI, and reproducible Ubuntu 24.04 amd64 `.deb` are implemented. The package still requires private draft enrollment and rehearsal on the actual laptop; see [Laptop Companion](docs/laptop-companion.md).
 
 ## Why this exists
 
@@ -125,6 +125,7 @@ npm run lint
 src/       Worker routes, validation, security, ranking, Durable Object state
 web/       Responsive dashboard
 companion/ Installable laptop agent, CLI, browser observer, and secure delivery
+packaging/ Reproducible Ubuntu package, desktop launcher, and user service
 scripts/   Catalog, draft initialization, ingestion, and recovery tools
 tests/     Worker integration, ranking, validation, and Python pipeline tests
 docs/      Architecture and companion design

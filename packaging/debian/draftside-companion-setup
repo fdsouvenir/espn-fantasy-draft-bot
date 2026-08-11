@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+
+quiet=false
+if [ "${1:-}" = "--quiet" ]; then
+  quiet=true
+elif [ "$#" -gt 0 ]; then
+  echo "usage: draftside-companion-setup [--quiet]" >&2
+  exit 2
+fi
+
+config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
+state_home="${XDG_STATE_HOME:-${HOME}/.local/state}"
+data_home="${XDG_DATA_HOME:-${HOME}/.local/share}"
+config_dir="${config_home}/draftside-companion"
+config_path="${config_dir}/companion.toml"
+
+umask 077
+install -d -m 0700 "$config_dir"
+install -d -m 0700 "${state_home}/draftside-companion"
+install -d -m 0700 "${data_home}/draftside-companion/chrome-profile"
+
+created=false
+if [ ! -e "$config_path" ]; then
+  install -m 0600 /usr/share/draftside-companion/config.example.toml "$config_path"
+  created=true
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl --user daemon-reload >/dev/null 2>&1 || true
+fi
+
+if [ "$quiet" = false ]; then
+  printf '{"ok":true,"config":"%s","created":%s}\n' "$config_path" "$created"
+fi

@@ -10,16 +10,16 @@ The companion is not an auto-drafter and does not need a general-purpose AI runt
 
 > Observe the user's existing draft-room connection, normalize selections, and deliver them reliably to the private Draftside backend.
 
-The repository includes an installable Python CLI package in `companion/`, with Chrome lifecycle management, preflight, start/status/stop commands, reconnect behavior, owner-only state, environment or OS-keyring credentials, and signed Worker delivery. A signed graphical/one-click distribution, short-lived enrollment flow, and verification on the actual draft laptop remain future release work.
+The repository includes an installable Python CLI package in `companion/` and a reproducible Ubuntu 24.04 amd64 Debian package. The `.deb` adds a GNOME launcher, user-level systemd supervision, XDG user paths, interactive Secret Service enrollment, checksums, and clean system-package removal while preserving private recovery data. Verification on the actual draft laptop and a short-lived server-side enrollment exchange remain release work.
 
 ## Intended experience
 
-1. The user starts **Draftside Companion** from its CLI or a future desktop launcher.
+1. The user starts **Draftside Companion** from its GNOME launcher or CLI.
 2. The companion performs a self-check: supported Chrome, backend reachability, clock agreement, initializer integrity, and credential availability.
 3. It opens or attaches to a dedicated Chrome profile and guides the user to sign in directly on ESPN.
 4. The user opens the ESPN draft room normally.
 5. The companion attaches through local CDP before the draft socket opens, then shows **Connected**.
-6. The user opens the dashboard in a separate tab or window. Automatic dashboard launch is planned for the desktop package.
+6. The desktop launcher opens the private dashboard in a separate tab after preflight succeeds.
 7. The user drafts normally. The CLI exposes delivery health through its `status` command.
 8. Closing the companion stops observation and removes runtime secrets from memory.
 
@@ -91,13 +91,13 @@ Unexpected frame shapes, team order, player identity, or pick sequence are hard 
 
 The CLI package supports Chrome discovery on common desktop platforms, but the first polished desktop release should target the actual draft laptop operating system and architecture, then add other platforms only after testing.
 
-Recommended distribution properties:
+The first package targets Ubuntu 24.04 LTS on amd64 and provides:
 
-- signed installer or notarized application where the platform supports it;
-- bundled runtime with no separate automation framework, Python, Node.js, or developer-tool installation required;
-- automatic local-only health page or small native status window;
-- one-click start/stop and explicit uninstall;
-- reproducible build metadata and checksums;
+- distro-native Python dependencies with no Node.js or automation framework;
+- GNOME launcher plus user-level systemd supervision;
+- interactive owner-only routing/initializer installation and Secret Service storage;
+- explicit setup, preflight, service, status, dashboard, and uninstall paths;
+- reproducible build metadata and SHA-256 checksum;
 - no auto-update channel until signing, rollback, and release provenance are established.
 
 The packaged application should wrap the existing Python companion. Rewriting it solely to change languages would add risk without improving the read-only boundary.
@@ -120,11 +120,9 @@ Before using the companion in a real draft:
 - [ ] Confirm the dashboard remains inaccessible without the intended Access policy.
 - [ ] Rehearse a manual board-update fallback independent of the companion.
 
-## Open questions before packaging
+## Remaining release questions
 
-- Which operating system and CPU architecture will the draft laptop use?
-- Should Chrome be launched by the companion or should the user select an existing supported tab?
-- What is the preferred enrollment and credential-revocation flow?
+- Should the current interactive Secret Service enrollment be replaced by a short-lived single-use exchange?
 - Should diagnostics stay entirely local, or may the user explicitly export a sanitized support bundle?
 - What manual fallback should be available if ESPN changes its draft-room transport on draft day?
 

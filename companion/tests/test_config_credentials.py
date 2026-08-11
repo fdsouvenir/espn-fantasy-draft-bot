@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from draft_companion.config import load_config
-from draft_companion.credentials import load_credentials
+from draft_companion.credentials import Credentials, load_credentials, store_credentials
 
 
 def write_config(
@@ -101,3 +101,76 @@ def test_keyring_abstraction_uses_fixed_nonsecret_usernames():
         ("draft-helper", "CF_ACCESS_CLIENT_ID"),
         ("draft-helper", "CF_ACCESS_CLIENT_SECRET"),
     ]
+
+
+def test_credentials_are_stored_under_expected_names():
+    class Ring:
+        def __init__(self):
+            self.values = {}
+
+        def get_password(self, service, username):
+            return self.values.get((service, username))
+
+        def set_password(self, service, username, password):
+            self.values[(service, username)] = password
+
+        def delete_password(self, service, username):
+            self.values.pop((service, username), None)
+
+    ring = Ring()
+    result = store_credentials(
+        "draftside-companion",
+        {
+            "INGEST_HMAC_CURRENT": "h" * 32,
+            "CF_ACCESS_CLIENT_ID": "client",
+            "CF_ACCESS_CLIENT_SECRET": "secret",
+        },
+        keyring=ring,
+    )
+    assert result == Credentials("h" * 32, "client", "secret")
+    assert ring.values == {
+        ("draftside-companion", "INGEST_HMAC_CURRENT"): "h" * 32,
+        ("draftside-companion", "CF_ACCESS_CLIENT_ID"): "client",
+        ("draftside-companion", "CF_ACCESS_CLIENT_SECRET"): "secret",
+    }
+
+
+@pytest.mark.parametrize("failure_number", [1, 2, 3])
+def test_credential_storage_rolls_back_every_partial_failure(failure_number: int):
+    class Ring:
+        def __init__(self):
+            self.values = {
+                ("draftside-companion", name): f"old-{name}"
+                for name in (
+                    "INGEST_HMAC_CURRENT",
+                    "CF_ACCESS_CLIENT_ID",
+                    "CF_ACCESS_CLIENT_SECRET",
+                )
+            }
+            self.calls = 0
+            self.failed = False
+
+        def get_password(self, service, username):
+            return self.values.get((service, username))
+
+        def set_password(self, service, username, password):
+            self.calls += 1
+            if self.calls == failure_number and not self.failed:
+                self.failed = True
+                raise RuntimeError("keyring unavailable")
+            self.values[(service, username)] = password
+
+        def delete_password(self, service, username):
+            self.values.pop((service, username), None)
+
+    ring = Ring()
+    original = dict(ring.values)
+    new_values = {
+        "INGEST_HMAC_CURRENT": "h" * 32,
+        "CF_ACCESS_CLIENT_ID": "client",
+        "CF_ACCESS_CLIENT_SECRET": "secret",
+    }
+    with pytest.raises(RuntimeError, match="previous values were restored") as raised:
+        store_credentials("draftside-companion", new_values, keyring=ring)
+    assert ring.values == original
+    assert all(value not in str(raised.value) for value in new_values.values())

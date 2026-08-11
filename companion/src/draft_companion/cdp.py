@@ -40,7 +40,8 @@ def discover_chrome(explicit: str | None = None) -> str:
 def launch_chrome(
     executable: str, profile: Path, port: int, draft_url: str
 ) -> subprocess.Popen[Any]:
-    profile.mkdir(parents=True, exist_ok=True)
+    profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(profile, 0o700)
     return subprocess.Popen(
         [
             executable,

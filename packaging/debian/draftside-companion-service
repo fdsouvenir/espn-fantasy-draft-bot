@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+  start|stop|restart|status)
+    command="$1"
+    ;;
+  *)
+    echo "usage: draftside-companion-service {start|stop|restart|status}" >&2
+    exit 2
+    ;;
+esac
+
+config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
+config_path="${DRAFTSIDE_CONFIG:-${config_home}/draftside-companion/companion.toml}"
+if [ ! -f "$config_path" ]; then
+  echo "Draftside is not configured. Run draftside-companion-setup first." >&2
+  exit 1
+fi
+
+systemctl --user "$command" draftside-companion.service

@@ -16,6 +16,10 @@ class Credentials:
 class KeyringLike(Protocol):
     def get_password(self, service_name: str, username: str) -> str | None: ...
 
+    def set_password(self, service_name: str, username: str, password: str) -> None: ...
+
+    def delete_password(self, service_name: str, username: str) -> None: ...
+
 
 def _validate(values: Mapping[str, str | None]) -> Credentials:
     missing = [name for name, value in values.items() if not value]
@@ -50,3 +54,48 @@ def load_credentials(
             raise RuntimeError("install the keyring extra to use OS keyring credentials") from error
         keyring = imported_keyring
     return _validate({name: keyring.get_password(service, name) for name in names})
+
+
+def store_credentials(
+    service: str,
+    values: Mapping[str, str | None],
+    *,
+    keyring: KeyringLike | None = None,
+) -> Credentials:
+    credentials = _validate(values)
+    if keyring is None:
+        try:
+            import keyring as imported_keyring
+        except ImportError as error:
+            raise RuntimeError(
+                "install the keyring extra to store OS keyring credentials"
+            ) from error
+        keyring = imported_keyring
+    updates = (
+        ("INGEST_HMAC_CURRENT", credentials.ingest_hmac),
+        ("CF_ACCESS_CLIENT_ID", credentials.access_client_id),
+        ("CF_ACCESS_CLIENT_SECRET", credentials.access_client_secret),
+    )
+    previous = {name: keyring.get_password(service, name) for name, _value in updates}
+    changed: list[str] = []
+    try:
+        for name, value in updates:
+            keyring.set_password(service, name, value)
+            changed.append(name)
+    except Exception as error:
+        rollback_failed = False
+        for name in reversed(changed):
+            try:
+                if previous[name] is None:
+                    keyring.delete_password(service, name)
+                else:
+                    keyring.set_password(service, name, previous[name])
+            except Exception:  # noqa: BLE001 - attempt every rollback after backend errors
+                rollback_failed = True
+        message = (
+            "credential storage failed and rollback was incomplete"
+            if rollback_failed
+            else "credential storage failed; previous values were restored"
+        )
+        raise RuntimeError(message) from error
+    return credentials

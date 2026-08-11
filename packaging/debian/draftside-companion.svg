@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Draftside Companion">
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#113f2d"/>
+      <stop offset="1" stop-color="#071c16"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#field)"/>
+  <path d="M21 37h86M21 64h86M21 91h86M43 20v88M85 20v88" fill="none" stroke="#2d7658" stroke-width="3" opacity=".7"/>
+  <path d="M40 40c12-15 36-15 48 0 10 12 10 36 0 48-12 15-36 15-48 0-10-12-10-36 0-48Z" fill="#f6c453" stroke="#fff3c8" stroke-width="4"/>
+  <path d="m47 45 34 38M81 45 47 83M43 64h42" fill="none" stroke="#6b3f14" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="98" cy="98" r="17" fill="#e7fff5" stroke="#0b2c21" stroke-width="4"/>
+  <path d="m90 98 6 6 11-13" fill="none" stroke="#16734e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

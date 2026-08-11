@@ -1,0 +1,13 @@
+Package: draftside-companion
+Version: @VERSION@-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Draftside Contributors
+Depends: python3 (>= 3.11), python3-websocket, python3-keyring, python3-secretstorage
+Recommends: google-chrome-stable | chromium-browser | chromium
+Homepage: https://github.com/fdsouvenir/espn-fantasy-draft-bot
+Description: Read-only ESPN fantasy draft laptop companion
+ Draftside Companion observes the ESPN draft room already open in a dedicated
+ local Chrome profile and delivers signed, normalized draft events to a private
+ Draftside backend. It never submits picks or stores ESPN credentials.

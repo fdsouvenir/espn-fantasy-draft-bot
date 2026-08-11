@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 import pytest
 
-from draft_companion.cdp import FrameSource
+from draft_companion.cdp import FrameSource, launch_chrome
 from draft_companion.frames import DecodeError, raw_board, selected_frame
 
 
@@ -138,3 +140,18 @@ def test_cdp_does_not_return_debugger_endpoint_in_errors():
             connector=None,
         )
     assert "ws://" not in str(raised.value)
+
+
+def test_chrome_profile_is_owner_only(tmp_path: Path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "draft_companion.cdp.subprocess.Popen",
+        lambda command, **kwargs: calls.append((command, kwargs)) or object(),
+    )
+    profile = tmp_path / "chrome-profile"
+
+    launch_chrome("google-chrome", profile, 9222, "https://fantasy.espn.com/football/draft")
+
+    if os.name != "nt":
+        assert profile.stat().st_mode & 0o077 == 0
+    assert "--remote-debugging-address=127.0.0.1" in calls[0][0]

@@ -1,0 +1,19 @@
+[Unit]
+Description=Draftside read-only ESPN draft companion
+Documentation=file:/usr/share/doc/draftside-companion/README.md
+After=network-online.target graphical-session.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/draftside-companion run
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
