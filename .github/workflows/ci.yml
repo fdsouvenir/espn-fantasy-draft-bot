@@ -66,7 +66,11 @@ jobs:
           systemd-analyze verify /usr/lib/systemd/user/draftside-companion.service
           draftside-companion --help
           test_home="$(mktemp -d)"
-          HOME="$test_home" draftside-companion-setup
+          HOME="$test_home" \
+            XDG_CONFIG_HOME="$test_home/.config" \
+            XDG_STATE_HOME="$test_home/.local/state" \
+            XDG_DATA_HOME="$test_home/.local/share" \
+            draftside-companion-setup
           test "$(stat -c '%a' "$test_home/.config/draftside-companion/companion.toml")" = 600
           sudo apt-get purge -y draftside-companion
           test -f "$test_home/.config/draftside-companion/companion.toml"
