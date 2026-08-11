@@ -40,7 +40,7 @@ grep -q 'draftside-companion-ui' "$work/root/usr/bin/draftside-companion-desktop
 grep -q '^Terminal=false$' "$work/root/usr/share/applications/draftside-companion.desktop"
 grep -q '<project_license>MIT</project_license>' "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
 grep -q '<content_rating type="oars-1.1"/>' "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
-grep -q '<release version="0.2.0"' "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
+grep -q '<release version="0.3.0"' "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
 appstreamcli validate --no-net --strict "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
 
 if rg -n --hidden --glob '!*.svg' '(gh[pousr]_|cfat_|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|espn_s2|SWID=)' "$work/root"; then

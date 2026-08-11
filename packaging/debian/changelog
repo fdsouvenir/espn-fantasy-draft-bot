@@ -1,3 +1,21 @@
+draftside-companion (0.3.0-1) unstable; urgency=medium
+
+  * Ask for the private dashboard URL on first launch instead of embedding it.
+  * Require existing installations to confirm their dashboard URL after upgrade.
+  * Fix Chrome startup under the systemd user service.
+  * Open links with the desktop handler and start Chrome at ESPN's current fantasy home.
+  * Show each connection stage and write redacted status transitions to the journal.
+  * Refresh once to synchronize, never on retries, and report delivery validation failures.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Tue, 11 Aug 2026 15:30:00 -0500
+
+draftside-companion (0.2.0-1) unstable; urgency=medium
+
+  * Connect automatically without configuration or pairing codes.
+  * Add a native status window and dashboard device revocation.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Tue, 11 Aug 2026 14:20:00 -0500
+
 draftside-companion (0.1.1-1) unstable; urgency=medium
 
   * Add complete AppStream metadata for Ubuntu Software.
@@ -13,9 +31,3 @@ draftside-companion (0.1.0-1) unstable; urgency=medium
   * Add reproducible builds, checksum verification, and clean removal checks.
 
  -- Draftside Contributors <maintainers@draftside.dev>  Tue, 11 Aug 2026 13:00:00 -0500
-draftside-companion (0.2.0-1) unstable; urgency=medium
-
-  * Connect automatically without configuration or pairing codes.
-  * Add a native status window and dashboard device revocation.
-
- -- Draftside Contributors <maintainers@draftside.dev>  Tue, 11 Aug 2026 14:20:00 -0500

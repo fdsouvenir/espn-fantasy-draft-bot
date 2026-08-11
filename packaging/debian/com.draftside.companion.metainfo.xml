@@ -43,6 +43,11 @@
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.0" date="2026-08-11">
+      <description>
+        <p>Prompts for the dashboard URL, reports each connection stage, and fixes browser startup.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-08-11">
       <description>
         <p>Adds automatic laptop enrollment, dashboard revocation, and a native status window.</p>
