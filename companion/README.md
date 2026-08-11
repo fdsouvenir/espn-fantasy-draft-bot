@@ -45,8 +45,8 @@ The companion never needs your ESPN password or cookies. Sign in to ESPN yoursel
 Download the private release artifact and its checksum, then verify and install it:
 
 ```bash
-sha256sum -c draftside-companion_0.1.0-1_amd64.deb.sha256
-sudo apt install ./draftside-companion_0.1.0-1_amd64.deb
+sha256sum -c draftside-companion_0.1.1-1_amd64.deb.sha256
+sudo apt install ./draftside-companion_0.1.1-1_amd64.deb
 draftside-companion-setup
 ```
 

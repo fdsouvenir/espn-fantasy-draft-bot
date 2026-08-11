@@ -2,7 +2,8 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-artifact="$root/dist/draftside-companion_0.1.0-1_amd64.deb"
+version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$root/companion/pyproject.toml" | head -n1)
+artifact="$root/dist/draftside-companion_${version}-1_amd64.deb"
 
 "$root/packaging/debian/build-deb.sh" >/dev/null
 first=$(sha256sum "$artifact" | cut -d' ' -f1)
@@ -24,16 +25,22 @@ test -x "$work/root/usr/bin/draftside-companion-setup"
 test -f "$work/root/usr/lib/systemd/user/draftside-companion.service"
 test -f "$work/root/usr/share/applications/draftside-companion.desktop"
 test -f "$work/root/usr/share/icons/hicolor/scalable/apps/draftside-companion.svg"
+test -f "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
 test -f "$work/root/usr/share/draftside-companion/config.example.toml"
 test -f "$work/root/usr/share/doc/draftside-companion/changelog.Debian.gz"
 test ! -d "$work/root/usr/lib/python3/dist-packages/draft_companion/__pycache__"
 
 grep -q '^Architecture: amd64$' "$work/control/control"
+grep -Eq '^Installed-Size: [1-9][0-9]*$' "$work/control/control"
 grep -q '^Depends: .*python3-keyring' "$work/control/control"
 grep -q 'credential_source = "keyring"' "$work/root/usr/share/draftside-companion/config.example.toml"
 grep -q 'REPLACE_ME' "$work/root/usr/share/draftside-companion/config.example.toml"
 grep -q 'draftside-companion-service start' "$work/root/usr/bin/draftside-companion-desktop"
 ! grep -q 'draftside-companion-service restart' "$work/root/usr/bin/draftside-companion-desktop"
+grep -q '<project_license>MIT</project_license>' "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
+grep -q '<content_rating type="oars-1.1"/>' "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
+grep -q '<release version="0.1.1"' "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
+appstreamcli validate --no-net --strict "$work/root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
 
 if rg -n --hidden --glob '!*.svg' '(gh[pousr]_|cfat_|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|espn_s2|SWID=)' "$work/root"; then
   echo "Packaged payload contains a secret-like value" >&2

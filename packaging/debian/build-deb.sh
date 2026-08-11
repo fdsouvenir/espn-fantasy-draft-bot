@@ -24,8 +24,8 @@ install -d "$package_root/usr/share/applications"
 install -d "$package_root/usr/share/draftside-companion"
 install -d "$package_root/usr/share/doc/draftside-companion"
 install -d "$package_root/usr/share/icons/hicolor/scalable/apps"
+install -d "$package_root/usr/share/metainfo"
 
-sed "s/@VERSION@/$version/g" "$root/packaging/debian/control.in" > "$package_root/DEBIAN/control"
 install -m 0755 "$root/packaging/debian/postinst" "$package_root/DEBIAN/postinst"
 install -m 0755 "$root/packaging/debian/postrm" "$package_root/DEBIAN/postrm"
 
@@ -41,11 +41,18 @@ done
 install -m 0644 "$root/packaging/debian/draftside-companion.service" "$package_root/usr/lib/systemd/user/draftside-companion.service"
 install -m 0644 "$root/packaging/debian/draftside-companion.desktop" "$package_root/usr/share/applications/draftside-companion.desktop"
 install -m 0644 "$root/packaging/debian/draftside-companion.svg" "$package_root/usr/share/icons/hicolor/scalable/apps/draftside-companion.svg"
+install -m 0644 "$root/packaging/debian/com.draftside.companion.metainfo.xml" "$package_root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
 install -m 0644 "$root/packaging/debian/config.example.toml" "$package_root/usr/share/draftside-companion/config.example.toml"
 install -m 0644 "$root/companion/README.md" "$package_root/usr/share/doc/draftside-companion/README.md"
 install -m 0644 "$root/LICENSE" "$package_root/usr/share/doc/draftside-companion/copyright"
 gzip -n -9 -c "$root/packaging/debian/changelog" > "$package_root/usr/share/doc/draftside-companion/changelog.Debian.gz"
 chmod 0644 "$package_root/usr/share/doc/draftside-companion/changelog.Debian.gz"
+
+installed_size=$(du -ks "$package_root/usr" | awk '{print $1}')
+sed \
+  -e "s/@VERSION@/$version/g" \
+  -e "s/@INSTALLED_SIZE@/$installed_size/g" \
+  "$root/packaging/debian/control.in" > "$package_root/DEBIAN/control"
 
 find "$package_root" -print0 | xargs -0 touch -h -d "@$SOURCE_DATE_EPOCH"
 install -d "$output_dir"

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.draftside.companion</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Draftside Companion</name>
+  <summary>Read-only ESPN fantasy draft companion</summary>
+  <description>
+    <p>
+      Draftside Companion observes an ESPN fantasy draft room already open in a
+      dedicated local Chrome profile and securely relays normalized draft events
+      to a private Draftside dashboard.
+    </p>
+    <p>
+      It never submits picks, changes league settings, or stores ESPN credentials.
+      Reconnect recovery restores missed picks from ESPN's current draft board.
+    </p>
+  </description>
+  <developer id="com.draftside">
+    <name>Draftside Contributors</name>
+  </developer>
+  <launchable type="desktop-id">draftside-companion.desktop</launchable>
+  <icon type="stock">draftside-companion</icon>
+  <provides>
+    <binary>draftside-companion</binary>
+  </provides>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <keywords>
+    <keyword>fantasy football</keyword>
+    <keyword>draft</keyword>
+    <keyword>ESPN</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/fdsouvenir/espn-fantasy-draft-bot</url>
+  <url type="bugtracker">https://github.com/fdsouvenir/espn-fantasy-draft-bot/issues</url>
+  <url type="vcs-browser">https://github.com/fdsouvenir/espn-fantasy-draft-bot</url>
+  <screenshots>
+    <screenshot type="default">
+      <image type="source" width="1440" height="900">https://raw.githubusercontent.com/fdsouvenir/espn-fantasy-draft-bot/main/docs/images/dashboard.png</image>
+      <caption>The private Draftside dashboard during a mock draft</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.1" date="2026-08-11">
+      <description>
+        <p>First portfolio-ready Ubuntu package with complete software-center metadata.</p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-08-11">
+      <description>
+        <p>Initial Ubuntu 24.04 companion package.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -52,16 +52,19 @@ jobs:
       - run: packaging/debian/test-package.sh
       - name: Inspect package
         run: |
-          dpkg-deb --info dist/draftside-companion_0.1.0-1_amd64.deb
-          dpkg-deb --contents dist/draftside-companion_0.1.0-1_amd64.deb
-          (cd dist && sha256sum -c draftside-companion_0.1.0-1_amd64.deb.sha256)
+          package="$(find dist -maxdepth 1 -name 'draftside-companion_*-1_amd64.deb' -print -quit)"
+          dpkg-deb --info "$package"
+          dpkg-deb --contents "$package"
+          (cd dist && sha256sum -c "$(basename "$package").sha256")
           test "$(find dist -name '*.deb' | wc -l)" -eq 1
       - name: Install and remove on Ubuntu 24.04
         run: |
           sudo apt-get update
-          sudo apt-get install -y lintian desktop-file-utils
-          lintian --fail-on error dist/draftside-companion_0.1.0-1_amd64.deb
-          sudo apt-get install -y --no-install-recommends ./dist/draftside-companion_0.1.0-1_amd64.deb
+          sudo apt-get install -y appstream lintian desktop-file-utils
+          package="$(find dist -maxdepth 1 -name 'draftside-companion_*-1_amd64.deb' -print -quit)"
+          lintian --fail-on error "$package"
+          sudo apt-get install -y --no-install-recommends "./$package"
+          appstreamcli validate --no-net --strict /usr/share/metainfo/com.draftside.companion.metainfo.xml
           desktop-file-validate /usr/share/applications/draftside-companion.desktop
           systemd-analyze verify /usr/lib/systemd/user/draftside-companion.service
           draftside-companion --help
@@ -79,6 +82,6 @@ jobs:
         with:
           name: draftside-companion-ubuntu-24.04-amd64
           path: |
-            dist/draftside-companion_0.1.0-1_amd64.deb
-            dist/draftside-companion_0.1.0-1_amd64.deb.sha256
+            dist/draftside-companion_*-1_amd64.deb
+            dist/draftside-companion_*-1_amd64.deb.sha256
           if-no-files-found: error
