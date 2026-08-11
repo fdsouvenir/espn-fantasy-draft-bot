@@ -140,6 +140,7 @@ def configure(
             "[chrome]",
             'executable = ""',
             f"profile_directory = {json.dumps(str(profile_directory))}",
+            'start_url = "https://www.espn.com/fantasy/football/"',
             "debug_port = 9222",
             "launch = true",
             "reload_on_attach = true",

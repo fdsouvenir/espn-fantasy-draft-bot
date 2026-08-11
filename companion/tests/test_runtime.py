@@ -130,7 +130,7 @@ def test_ensure_chrome_launches_dedicated_profile_and_waits(tmp_path: Path):
         discover=lambda _explicit: "chrome",
         sleeper=lambda _seconds: None,
     )
-    assert calls == [("chrome", tmp_path / "profile", 9222, cfg.draft_url)]
+    assert calls == [("chrome", tmp_path / "profile", 9222, cfg.chrome.start_url)]
 
 
 def test_process_alive_rejects_invalid_pid():

@@ -6,7 +6,7 @@ Draftside Companion is the small Ubuntu app that connects the ESPN draft room on
 
 1. Install the `.deb` and open **Draftside Companion**.
 2. Enter the HTTPS address of your private Draftside dashboard.
-3. Draftside opens the dashboard and ESPN in a dedicated Chrome profile.
+3. Draftside opens the dashboard with your desktop's default link handler and opens ESPN Fantasy Football in a dedicated Chrome profile.
 4. Sign into ESPN in that Draftside Chrome window and open the draft room.
 5. The status window turns **Ready** when picks are flowing.
 

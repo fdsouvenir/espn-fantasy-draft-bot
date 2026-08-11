@@ -325,7 +325,7 @@ def ensure_chrome(
         discover(config.chrome.executable),
         config.chrome.profile_directory,
         config.chrome.debug_port,
-        config.draft_url,
+        config.chrome.start_url,
     )
     for _ in range(30):
         try:

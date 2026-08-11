@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+DEFAULT_ESPN_START_URL = "https://www.espn.com/fantasy/football/"
+
 
 class SetupRequiredError(ValueError):
     """Raised when the desktop app still needs a user-confirmed dashboard URL."""
@@ -21,6 +23,7 @@ class ChromeConfig:
     debug_port: int
     launch: bool
     reload_on_attach: bool
+    start_url: str = DEFAULT_ESPN_START_URL
 
 
 @dataclass(frozen=True)
@@ -140,6 +143,7 @@ def write_device_config(path: Path, worker_base: str) -> str:
             "[chrome]",
             'executable = ""',
             f"profile_directory = {json.dumps(str(profile_directory))}",
+            f"start_url = {json.dumps(DEFAULT_ESPN_START_URL)}",
             "debug_port = 9222",
             "launch = true",
             "reload_on_attach = true",
@@ -199,6 +203,16 @@ def load_config(path: Path) -> Config:
         raise ValueError("draft_url must be an ESPN fantasy football draft URL")
     chrome = raw.get("chrome", {})
     runtime = raw.get("runtime", {})
+    start_url = chrome.get("start_url", DEFAULT_ESPN_START_URL)
+    parsed_start_url = urlparse(start_url) if isinstance(start_url, str) else None
+    if (
+        parsed_start_url is None
+        or parsed_start_url.scheme != "https"
+        or parsed_start_url.hostname not in {"www.espn.com", "fantasy.espn.com"}
+        or parsed_start_url.username is not None
+        or parsed_start_url.password is not None
+    ):
+        raise ValueError("chrome.start_url must be an ESPN https URL")
     debug_port = int(chrome.get("debug_port", 9222))
     if not 1024 <= debug_port <= 65535:
         raise ValueError("chrome.debug_port must be between 1024 and 65535")
@@ -233,6 +247,7 @@ def load_config(path: Path) -> Config:
             debug_port=debug_port,
             launch=bool(chrome.get("launch", True)),
             reload_on_attach=bool(chrome.get("reload_on_attach", True)),
+            start_url=start_url,
         ),
         runtime=RuntimeConfig(
             state_directory=_path(

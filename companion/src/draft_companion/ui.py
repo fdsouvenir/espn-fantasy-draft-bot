@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import webbrowser
 from pathlib import Path
 
 from .config import dashboard_candidate, dashboard_setup_required, write_device_config
@@ -35,7 +34,7 @@ def main() -> int:
         import gi
 
         gi.require_version("Gtk", "4.0")
-        from gi.repository import GLib, Gtk
+        from gi.repository import Gio, GLib, Gtk
     except (ImportError, ValueError) as error:
         raise SystemExit(f"Draftside's desktop interface is unavailable: {error}") from error
 
@@ -182,7 +181,7 @@ def main() -> int:
             def open_dashboard(_button):
                 configured = _read_health().get("dashboardUrl")
                 if isinstance(configured, str) and configured.startswith("https://"):
-                    webbrowser.open(configured)
+                    Gio.AppInfo.launch_default_for_uri(configured, None)
 
             def restart(_button):
                 subprocess.run(
@@ -228,7 +227,7 @@ def main() -> int:
                     and isinstance(dashboard_url, str)
                     and dashboard_url.startswith("https://")
                 ):
-                    webbrowser.open(dashboard_url)
+                    Gio.AppInfo.launch_default_for_uri(dashboard_url, None)
                     dashboard_opened = True
                 headline, copy = labels.get(
                     state,

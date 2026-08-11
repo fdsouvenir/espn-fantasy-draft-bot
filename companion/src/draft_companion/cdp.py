@@ -38,7 +38,7 @@ def discover_chrome(explicit: str | None = None) -> str:
 
 
 def launch_chrome(
-    executable: str, profile: Path, port: int, draft_url: str
+    executable: str, profile: Path, port: int, start_url: str
 ) -> subprocess.Popen[Any]:
     profile.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(profile, 0o700)
@@ -50,7 +50,7 @@ def launch_chrome(
             f"--user-data-dir={profile}",
             "--no-first-run",
             "--no-default-browser-check",
-            draft_url,
+            start_url,
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from draft_companion.config import (
+    DEFAULT_ESPN_START_URL,
     SetupRequiredError,
     dashboard_candidate,
     dashboard_setup_required,
@@ -92,6 +93,7 @@ credential_source = "device"
     assert config.draft_key is None
     assert config.init_file is None
     assert config.draft_url == "https://fantasy.espn.com/football/draft"
+    assert config.chrome.start_url == DEFAULT_ESPN_START_URL
 
 
 def test_legacy_config_requires_user_confirmation(tmp_path: Path):
@@ -123,6 +125,7 @@ def test_user_dashboard_config_is_saved_owner_only(tmp_path: Path, monkeypatch):
 
     config = load_config(config_path)
     assert config.worker_base == "https://private.example.com"
+    assert config.chrome.start_url == DEFAULT_ESPN_START_URL
     assert config.runtime.credential_source == "device"
     assert not dashboard_setup_required(config_path)
     if os.name != "nt":
