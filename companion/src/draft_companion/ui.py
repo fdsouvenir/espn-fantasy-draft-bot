@@ -131,7 +131,7 @@ def main() -> int:
         def show_status(self, window):
             self.clear_refresh()
             self.service("enable")
-            self.service("restart")
+            self.service("start")
 
             outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
             outer.set_margin_top(32)
@@ -139,7 +139,7 @@ def main() -> int:
             outer.set_margin_start(32)
             outer.set_margin_end(32)
 
-            title = Gtk.Label(label="Draftside is getting your war room ready")
+            title = Gtk.Label(label="Draftside connection status")
             title.add_css_class("title-1")
             title.set_wrap(True)
             title.set_xalign(0)
@@ -162,8 +162,17 @@ def main() -> int:
             detail = Gtk.Label(label="Opening the private dashboard and ESPN draft room.")
             detail.set_wrap(True)
             detail.set_xalign(0)
+            checklist = Gtk.Label(label="")
+            checklist.set_wrap(True)
+            checklist.set_xalign(0)
+            checklist.set_margin_top(6)
+            activity = Gtk.Label(label="Status updates automatically.")
+            activity.add_css_class("dim-label")
+            activity.set_xalign(0)
             card.append(status)
             card.append(detail)
+            card.append(checklist)
+            card.append(activity)
             outer.append(card)
 
             actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -188,8 +197,8 @@ def main() -> int:
                     ["systemctl", "--user", "restart", "draftside-companion.service"],
                     check=False,
                 )
-                status.set_label("Reconnecting…")
-                detail.set_label("Draftside will recover the complete board automatically.")
+                status.set_label("Restarting connections…")
+                detail.set_label("Draftside is reconnecting to your dashboard and ESPN.")
 
             def stop_service(_button):
                 subprocess.run(
@@ -208,9 +217,28 @@ def main() -> int:
             change.connect("clicked", change_dashboard)
 
             labels = {
-                "starting": ("Connecting automatically…", "Waiting for the ESPN draft room."),
+                "starting": ("Starting…", "Preparing the Draftside connections."),
+                "connecting_dashboard": (
+                    "Connecting to your private dashboard…",
+                    "Confirming this laptop with your Draftside deployment.",
+                ),
+                "waiting_for_draft_room": (
+                    "Private dashboard connected",
+                    "Open your league's draft room in the separate Draftside Chrome window.",
+                ),
+                "chrome_unavailable": (
+                    "Draftside Chrome is unavailable",
+                    "Click Reconnect to reopen Chrome, then open your ESPN draft room.",
+                ),
+                "dashboard_unreachable": (
+                    "Private dashboard is unavailable",
+                    "Check your network and dashboard address. Draftside will keep retrying.",
+                ),
                 "live": ("Ready", "Draft picks are flowing to your private dashboard."),
-                "reconnecting": ("Reconnecting…", "Recovering the complete board from ESPN."),
+                "reconnecting": (
+                    "Draft connection interrupted",
+                    "Draftside is retrying and will recover the complete board automatically.",
+                ),
                 "complete": ("Draft complete", "The complete board has been delivered."),
                 "stopped": ("Stopped", "No draft information is being sent."),
                 "revoked": ("Access revoked", "Re-enable this laptop from the private dashboard."),
@@ -245,6 +273,46 @@ def main() -> int:
                 ):
                     copy = f"{filled} of {total} picks received. {copy}"
                 detail.set_label(copy)
+                dashboard_state = (
+                    "Access revoked"
+                    if state == "revoked"
+                    else "Unavailable"
+                    if state == "dashboard_unreachable"
+                    else "Connecting"
+                    if state in {"starting", "connecting_dashboard"}
+                    else "Connected"
+                )
+                chrome_state = (
+                    "Unavailable"
+                    if state == "chrome_unavailable"
+                    else "Stopped"
+                    if state == "stopped"
+                    else "Open"
+                )
+                draft_state = (
+                    "Connected"
+                    if state in {"live", "complete"}
+                    else "Waiting for you"
+                    if state == "waiting_for_draft_room"
+                    else "Stopped"
+                    if state == "stopped"
+                    else "Not connected"
+                )
+                checklist.set_label(
+                    "\n".join(
+                        (
+                            f"Private dashboard: {dashboard_state}",
+                            f"Draftside Chrome: {chrome_state}",
+                            f"ESPN draft room: {draft_state}",
+                        )
+                    )
+                )
+                checks = health.get("reconnects")
+                activity.set_label(
+                    f"Connection checks: {checks}. Status updates automatically."
+                    if isinstance(checks, int) and checks > 0
+                    else "Status updates automatically."
+                )
                 return GLib.SOURCE_CONTINUE
 
             refresh()

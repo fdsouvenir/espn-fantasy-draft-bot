@@ -12,6 +12,8 @@ Draftside Companion is the small Ubuntu app that connects the ESPN draft room on
 
 There is no pairing code, API key, TOML editing, or terminal setup. The dashboard URL is entered on first launch and stored only in the user's owner-only local configuration. The app creates a random device identity in Ubuntu Secret Service and enrolls itself with that private Draftside deployment. The dashboard shows the laptop and provides **Revoke** and **Re-enable** controls.
 
+The status window separately reports the private dashboard, Draftside Chrome, and ESPN draft-room connections. **Private dashboard connected** means enrollment succeeded; **Ready** means the draft-room observer is also attached and can deliver picks.
+
 ## Install on Ubuntu 24.04 amd64
 
 ```bash
@@ -39,10 +41,10 @@ The CLI remains available for support and development:
 draftside-companion status
 draftside-companion preflight
 draftside-companion-service restart
-journalctl --user -u draftside-companion.service
+journalctl --user -u draftside-companion.service -f
 ```
 
-Runtime state is owner-only under `~/.local/state/draftside-companion`. The dedicated Chrome profile lives under `~/.local/share/draftside-companion`. Neither location belongs in source control or cloud sync.
+The system journal records redacted status transitions without dashboard URLs, device credentials, or ESPN data. Runtime state is owner-only under `~/.local/state/draftside-companion`. The dedicated Chrome profile lives under `~/.local/share/draftside-companion`. Neither location belongs in source control or cloud sync.
 
 ## Security model
 

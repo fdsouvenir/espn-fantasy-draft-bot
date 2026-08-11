@@ -14,6 +14,10 @@ from urllib.parse import urlparse
 import websocket
 
 
+class DraftRoomNotFoundError(RuntimeError):
+    """Raised while Chrome is open but no ESPN draft-room tab is available."""
+
+
 def discover_chrome(explicit: str | None = None) -> str:
     if explicit:
         if Path(explicit).is_file() or shutil.which(explicit):
@@ -80,7 +84,7 @@ class FrameSource:
         tabs = tabs_loader(port)
         target = next((tab for tab in tabs if str(tab.get("url", "")).startswith(draft_url)), None)
         if target is None:
-            raise RuntimeError("ESPN draft-room tab not found")
+            raise DraftRoomNotFoundError("ESPN draft-room tab not found")
         debugger_endpoint = target.get("webSocketDebuggerUrl")
         if not isinstance(debugger_endpoint, str):
             raise TypeError("CDP target is unavailable")

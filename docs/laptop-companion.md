@@ -12,6 +12,8 @@ The Laptop Companion runs beside the ESPN draft tab on the laptop being used to 
 
 Everything else is automatic. There are no pairing codes, API keys, TOML editing, or terminal windows. The private dashboard shows the registered laptop and can revoke or re-enable it.
 
+The GTK window shows the private dashboard, dedicated Chrome, and ESPN draft-room connections independently. Redacted state transitions are also written to the systemd user journal for support diagnostics.
+
 ## Runtime design
 
 ```mermaid

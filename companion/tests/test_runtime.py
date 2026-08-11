@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import ClassVar
 
+from draft_companion.cdp import DraftRoomNotFoundError
 from draft_companion.config import ChromeConfig, Config, RuntimeConfig
 from draft_companion.credentials import Credentials
 from draft_companion.runtime import (
@@ -86,6 +87,55 @@ def test_runtime_commits_exact_board_and_owner_only_files(tmp_path: Path, monkey
     if os.name != "nt":
         assert oct((tmp_path / "state/checkpoint.json").stat().st_mode & 0o777) == "0o600"
     assert len(FakeWorker.instances[-1].posts) == 2
+
+
+def test_health_logs_only_redacted_status_transitions(tmp_path: Path, capsys):
+    runtime = Companion(config(tmp_path))
+    runtime._health(
+        "waiting_for_draft_room",
+        reason="draft_room_not_open",
+        reconnects=1,
+        dashboardUrl="https://private.example.com/?draft=secret",
+    )
+    runtime._health(
+        "waiting_for_draft_room",
+        reason="draft_room_not_open",
+        reconnects=2,
+        dashboardUrl="https://private.example.com/?draft=secret",
+    )
+    runtime._health("live", filledPicks=0, totalPicks=64)
+
+    output = capsys.readouterr().out
+    entries = [json.loads(line) for line in output.splitlines()]
+    assert [entry["state"] for entry in entries] == ["waiting_for_draft_room", "live"]
+    assert "dashboardUrl" not in output
+    assert "private.example.com" not in output
+    assert "secret" not in output
+
+
+def test_missing_draft_room_is_reported_as_waiting_for_user(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("draft_companion.runtime.signal.signal", lambda *_args: None)
+
+    def missing_draft_room(*_args):
+        raise DraftRoomNotFoundError("ESPN draft-room tab not found")
+
+    runtime = Companion(
+        config(tmp_path),
+        frame_factory=missing_draft_room,
+        worker_factory=FakeWorker,
+        credential_loader=lambda *_args: Credentials("h" * 32, "id", "secret"),
+    )
+    health_updates = []
+    runtime._health = lambda state, **fields: health_updates.append((state, fields))
+    runtime.sleeper = lambda _seconds: runtime.stop()
+
+    runtime.run()
+
+    assert any(
+        state == "waiting_for_draft_room"
+        and fields.get("reason") == "draft_room_not_open"
+        for state, fields in health_updates
+    )
 
 
 def test_atomic_json_never_leaves_world_readable_state(tmp_path: Path):

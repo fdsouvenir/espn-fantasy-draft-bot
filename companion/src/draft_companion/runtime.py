@@ -10,9 +10,10 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
 
 from . import __version__
-from .cdp import FrameSource, discover_chrome, launch_chrome, list_tabs
+from .cdp import DraftRoomNotFoundError, FrameSource, discover_chrome, launch_chrome, list_tabs
 from .config import Config
 from .credentials import load_credentials, load_or_create_device
 from .frames import DecodeError, decode_init_picks, selected_frame
@@ -95,6 +96,7 @@ class Companion:
             sleeper,
         )
         self.stopping = False
+        self.last_logged_status: tuple[str, object] | None = None
         self.picks: dict[int, dict[str, int]] = {}
         self.draft_key = config.draft_key
         self.dashboard_url = config.worker_base
@@ -113,6 +115,15 @@ class Companion:
         value = {"schemaVersion": 1, "state": state, "updatedAt": utc_now(), "pid": os.getpid()}
         value.update({k: v for k, v in fields.items() if k in allowed})
         atomic_json(self.config.health_file, value)
+        status_key = (state, value.get("reason"))
+        if status_key != self.last_logged_status:
+            safe_log_fields = {
+                key: value[key]
+                for key in ("state", "reason", "filledPicks", "totalPicks", "reconnects")
+                if key in value
+            }
+            print(json.dumps({"event": "status", **safe_log_fields}, sort_keys=True), flush=True)
+            self.last_logged_status = status_key
 
     def _checkpoint(self) -> None:
         atomic_json(
@@ -135,11 +146,13 @@ class Companion:
                 device,
                 self.config.runtime.request_timeout_seconds,
             )
+            self._health("connecting_dashboard", dashboardUrl=self.dashboard_url)
             try:
                 bootstrap = worker.enroll(platform.node() or "Draft laptop", __version__)
             except WorkerError as error:
-                state = "revoked" if str(error) == "device_revoked" else "reconnecting"
-                self._health(state, message=str(error), dashboardUrl=self.dashboard_url)
+                reason = str(error)
+                state = "revoked" if reason == "device_revoked" else "dashboard_unreachable"
+                self._health(state, reason=reason, dashboardUrl=self.dashboard_url)
                 raise
             self.draft_key = str(bootstrap["draftKey"])
             draft_url = str(bootstrap["draftUrl"])
@@ -174,9 +187,10 @@ class Companion:
         signal.signal(signal.SIGINT, self.stop)
         reconnects = 0
         self._health(
-            "starting",
+            "waiting_for_draft_room",
             filledPicks=len(self.picks),
             totalPicks=init["totalPickSlots"],
+            reason="draft_room_not_open",
             dashboardUrl=self.dashboard_url,
         )
         while not self.stopping:
@@ -280,14 +294,54 @@ class Companion:
                     )
                     if complete:
                         self.stopping = True
-            except (OSError, RuntimeError, DecodeError, ValueError) as error:
+            except DraftRoomNotFoundError:
+                self._health(
+                    "waiting_for_draft_room",
+                    filledPicks=len(self.picks),
+                    totalPicks=init["totalPickSlots"],
+                    reason="draft_room_not_open",
+                    dashboardUrl=self.dashboard_url,
+                )
+                if not self.stopping:
+                    self.sleeper(self.config.runtime.reconnect_seconds)
+            except URLError:
+                reconnects += 1
+                self._health(
+                    "chrome_unavailable",
+                    filledPicks=len(self.picks),
+                    totalPicks=init["totalPickSlots"],
+                    reconnects=reconnects,
+                    reason="chrome_debugging_unavailable",
+                    dashboardUrl=self.dashboard_url,
+                )
+                if not self.stopping:
+                    try:
+                        ensure_chrome(self.config, sleeper=self.sleeper)
+                    except (OSError, RuntimeError, ValueError):
+                        pass
+                    self.sleeper(self.config.runtime.reconnect_seconds)
+            except WorkerError as error:
+                reconnects += 1
+                reason = str(error)
+                state = "revoked" if reason == "device_revoked" else "dashboard_unreachable"
+                self._health(
+                    state,
+                    filledPicks=len(self.picks),
+                    totalPicks=init["totalPickSlots"],
+                    reconnects=reconnects,
+                    reason=reason,
+                    dashboardUrl=self.dashboard_url,
+                )
+                if not self.stopping:
+                    self.sleeper(self.config.runtime.reconnect_seconds)
+            except (OSError, RuntimeError, DecodeError, ValueError):
                 reconnects += 1
                 self._health(
                     "reconnecting",
                     filledPicks=len(self.picks),
                     totalPicks=init["totalPickSlots"],
                     reconnects=reconnects,
-                    reason=error.__class__.__name__,
+                    reason="draft_stream_error",
                     dashboardUrl=self.dashboard_url,
                 )
                 if not self.stopping:
