@@ -25,6 +25,7 @@ test -f "$work/root/usr/lib/systemd/user/draftside-companion.service"
 test -f "$work/root/usr/share/applications/draftside-companion.desktop"
 test -f "$work/root/usr/share/icons/hicolor/scalable/apps/draftside-companion.svg"
 test -f "$work/root/usr/share/draftside-companion/config.example.toml"
+test -f "$work/root/usr/share/doc/draftside-companion/changelog.Debian.gz"
 test ! -d "$work/root/usr/lib/python3/dist-packages/draft_companion/__pycache__"
 
 grep -q '^Architecture: amd64$' "$work/control/control"

@@ -3,7 +3,7 @@ Version: @VERSION@-1
 Section: utils
 Priority: optional
 Architecture: amd64
-Maintainer: Draftside Contributors
+Maintainer: Draftside Contributors <maintainers@draftside.dev>
 Depends: python3 (>= 3.11), python3-websocket, python3-keyring, python3-secretstorage
 Recommends: google-chrome-stable | chromium-browser | chromium
 Homepage: https://github.com/fdsouvenir/espn-fantasy-draft-bot

@@ -1,0 +1,7 @@
+draftside-companion (0.1.0-1) unstable; urgency=medium
+
+  * Initial Ubuntu 24.04 amd64 desktop companion package.
+  * Add GNOME launcher, systemd user service, and Secret Service enrollment.
+  * Add reproducible builds, checksum verification, and clean removal checks.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Tue, 11 Aug 2026 13:00:00 -0500

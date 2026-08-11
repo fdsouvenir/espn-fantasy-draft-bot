@@ -44,6 +44,8 @@ install -m 0644 "$root/packaging/debian/draftside-companion.svg" "$package_root/
 install -m 0644 "$root/packaging/debian/config.example.toml" "$package_root/usr/share/draftside-companion/config.example.toml"
 install -m 0644 "$root/companion/README.md" "$package_root/usr/share/doc/draftside-companion/README.md"
 install -m 0644 "$root/LICENSE" "$package_root/usr/share/doc/draftside-companion/copyright"
+gzip -n -9 -c "$root/packaging/debian/changelog" > "$package_root/usr/share/doc/draftside-companion/changelog.Debian.gz"
+chmod 0644 "$package_root/usr/share/doc/draftside-companion/changelog.Debian.gz"
 
 find "$package_root" -print0 | xargs -0 touch -h -d "@$SOURCE_DATE_EPOCH"
 install -d "$output_dir"
