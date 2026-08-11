@@ -54,7 +54,7 @@ jobs:
         run: |
           dpkg-deb --info dist/draftside-companion_0.1.0-1_amd64.deb
           dpkg-deb --contents dist/draftside-companion_0.1.0-1_amd64.deb
-          sha256sum -c dist/draftside-companion_0.1.0-1_amd64.deb.sha256
+          (cd dist && sha256sum -c draftside-companion_0.1.0-1_amd64.deb.sha256)
           test "$(find dist -name '*.deb' | wc -l)" -eq 1
       - name: Install and remove on Ubuntu 24.04
         run: |

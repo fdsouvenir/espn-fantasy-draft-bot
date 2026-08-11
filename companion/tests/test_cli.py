@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from draft_companion.cli import configure, main
@@ -15,14 +16,14 @@ def test_dashboard_url_encodes_draft_key(capsys, tmp_path: Path):
     config.write_text(
         f'''worker_base = "https://draftside.example.com"
 draft_key = "season:league:Fred's team"
-init_file = "{initializer}"
+    init_file = "{initializer.as_posix()}"
 draft_url = "https://fantasy.espn.com/football/draft"
 
 [chrome]
-profile_directory = "{tmp_path / "chrome"}"
+    profile_directory = "{(tmp_path / "chrome").as_posix()}"
 
 [runtime]
-state_directory = "{tmp_path / "state"}"
+    state_directory = "{(tmp_path / "state").as_posix()}"
 '''
     )
 
@@ -59,8 +60,9 @@ def test_configure_installs_owner_only_routing_initializer_and_keyring_values(
     )
 
     assert result["credentials"] == "stored_in_keyring"
-    assert config_path.stat().st_mode & 0o077 == 0
-    assert (config_path.parent / "draft-init.json").stat().st_mode & 0o077 == 0
+    if os.name != "nt":
+        assert config_path.stat().st_mode & 0o077 == 0
+        assert (config_path.parent / "draft-init.json").stat().st_mode & 0o077 == 0
     assert "secret" not in config_path.read_text()
     assert stored == {
         "service": "draftside-companion",
