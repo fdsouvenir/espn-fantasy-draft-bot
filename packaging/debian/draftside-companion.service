@@ -13,7 +13,6 @@ RestartSec=2
 TimeoutStopSec=15
 UMask=0077
 NoNewPrivileges=true
-PrivateTmp=true
 Environment=PYTHONUNBUFFERED=1
 
 [Install]

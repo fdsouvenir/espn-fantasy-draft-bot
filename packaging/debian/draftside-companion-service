@@ -11,8 +11,5 @@ case "${1:-}" in
     ;;
 esac
 
-config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
-config_path="${DRAFTSIDE_CONFIG:-${config_home}/draftside-companion/companion.toml}"
-if [ ! -f "$config_path" ]; then draftside-companion-setup --quiet; fi
-
+draftside-companion-setup --quiet
 systemctl --user "$command" draftside-companion.service
