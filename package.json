@@ -1,0 +1,23 @@
+{
+  "name": "draftside",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "typegen": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint src tests web",
+    "test": "vitest run",
+    "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "check": "npm run typegen && npm run typecheck && npm run lint && npm test && npm run test:python && node --check web/app.js && wrangler deploy --env staging --dry-run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.8",
+    "@cloudflare/vitest-pool-workers": "^0.21.0",
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.120.1"
+  }
+}

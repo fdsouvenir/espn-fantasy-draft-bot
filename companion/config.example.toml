@@ -1,0 +1,23 @@
+# This file contains routing only. Never place credentials, ESPN cookies,
+# Cloudflare tokens, or WebSocket URLs here.
+worker_base = "https://fantasy-staging.example.com"
+draft_key = "staging:espn:ffl:2026:REPLACE_ME"
+init_file = "./draft-init.json"
+draft_url = "https://fantasy.espn.com/football/draft"
+
+[chrome]
+# Leave executable blank to use platform discovery.
+executable = ""
+profile_directory = "./state/chrome-profile"
+debug_port = 9222
+launch = true
+reload_on_attach = true
+
+[runtime]
+state_directory = "./state"
+reconnect_seconds = 2.0
+heartbeat_seconds = 15.0
+health_stale_seconds = 45.0
+request_timeout_seconds = 10.0
+credential_source = "environment" # or "keyring"
+keyring_service = "draftside-companion"
