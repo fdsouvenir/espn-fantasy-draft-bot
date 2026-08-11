@@ -83,7 +83,8 @@ def test_runtime_commits_exact_board_and_owner_only_files(tmp_path: Path, monkey
     health = json.loads((tmp_path / "state/health.json").read_text())
     assert [p["playerId"] for p in checkpoint["picks"]] == [101, -16007]
     assert health["state"] == "complete"
-    assert oct((tmp_path / "state/checkpoint.json").stat().st_mode & 0o777) == "0o600"
+    if os.name != "nt":
+        assert oct((tmp_path / "state/checkpoint.json").stat().st_mode & 0o777) == "0o600"
     assert len(FakeWorker.instances[-1].posts) == 2
 
 
@@ -91,11 +92,12 @@ def test_atomic_json_never_leaves_world_readable_state(tmp_path: Path):
     path = tmp_path / "state.json"
     atomic_json(path, {"ok": True})
     assert json.loads(path.read_text()) == {"ok": True}
-    assert path.stat().st_mode & 0o077 == 0
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o077 == 0
 
 
 def test_state_writes_work_without_unix_fchmod(tmp_path: Path, monkeypatch):
-    monkeypatch.delattr(os, "fchmod")
+    monkeypatch.delattr(os, "fchmod", raising=False)
     state = tmp_path / "state.json"
     evidence = tmp_path / "evidence.jsonl"
 
