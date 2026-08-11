@@ -186,3 +186,7 @@ footer { display: flex; justify-content: center; gap: 18px; padding: 18px; borde
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+.companion-devices { display: grid; gap: 10px; }
+.companion-device { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+.companion-device > div { display: grid; gap: 4px; }
+.danger-button { border-color: rgba(255, 107, 107, .45); color: #ff9b9b; }

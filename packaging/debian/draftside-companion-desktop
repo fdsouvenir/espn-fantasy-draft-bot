@@ -1,33 +1,3 @@
 #!/bin/sh
 set -eu
-
-draftside-companion-setup --quiet
-config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
-config_path="${DRAFTSIDE_CONFIG:-${config_home}/draftside-companion/companion.toml}"
-
-if grep -q 'REPLACE_ME\|example.com' "$config_path"; then
-  echo "Draftside Companion is installed but still needs its private draft configuration."
-  echo "Configuration: $config_path"
-  echo
-  echo "The installer intentionally contains no league identifiers or credentials."
-  echo "Provision the configuration and keyring values before draft-night preflight."
-  if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$config_path" >/dev/null 2>&1 || true
-  fi
-  printf '\nPress Enter to close...'
-  read -r _answer
-  exit 1
-fi
-
-if ! draftside-companion preflight; then
-  printf '\nPreflight failed. Press Enter to close...'
-  read -r _answer
-  exit 1
-fi
-
-draftside-companion-service start
-sleep 2
-draftside-companion status
-draftside-companion dashboard --open
-printf '\nDraftside is running. Press Enter to close this status window...'
-read -r _answer
+exec draftside-companion-ui

@@ -27,7 +27,7 @@ Most draft tools start with a static rankings list and gradually become wrong as
 - **Strongly consistent state.** One SQLite-backed Cloudflare Durable Object owns each draft's picks, rosters, availability, health, and recommendations.
 - **Deterministic recommendations.** The same versioned catalog and draft state always produce the same ranking, including explainable roster need, tier, role, workload, injury, and value signals.
 - **Fail-closed guidance.** Gaps, conflicts, stale ingestion, and unknown players suppress recommendations instead of producing confident nonsense.
-- **Designed for private operation.** A live deployment sits behind Cloudflare Access; ingestion also requires signed, replay-resistant HMAC requests.
+- **Designed for private operation.** The dashboard remains behind Cloudflare Access. The laptop auto-enrolls with a revocable per-device identity and signs every ingestion request.
 - **Responsive dashboard.** The live board, best available players, roster needs, health, and experimental return estimates work across desktop and mobile layouts.
 
 ## How it fits together
@@ -42,7 +42,7 @@ flowchart LR
     Browser[Private dashboard]
 
     ESPN -->|live selections + reconnect state| Companion
-    Companion -->|normalized, HMAC-signed events| Access
+    Companion -->|revocable device identity + signed events| Worker
     Access --> Worker
     Worker --> DO
     DO -->|snapshot + revision notifications| Browser
@@ -139,7 +139,7 @@ The repository may be public; the deployed application and real draft data must 
 
 - Use `?mock=1` or sanitized fixtures for screenshots, demos, and portfolio material.
 - Keep real league IDs, team names, draft keys, catalog releases, evidence files, checkpoints, and source payloads out of Git.
-- Never expose ESPN cookies, Cloudflare Access credentials, HMAC keys, authenticated socket details, or environment files.
+- Never expose ESPN cookies, device tokens, shared operator credentials, authenticated socket details, or environment files.
 - Supply environment-specific routes, Access policy, secrets, and real draft initializers through private deployment configuration—not a second production repository.
 - Keep every deployed draft route behind an identity-aware access policy and disable alternate public Worker URLs.
 - Do not use the project to automate drafting or bypass access controls.

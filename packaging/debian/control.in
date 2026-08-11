@@ -5,7 +5,7 @@ Priority: optional
 Architecture: amd64
 Installed-Size: @INSTALLED_SIZE@
 Maintainer: Draftside Contributors <maintainers@draftside.dev>
-Depends: python3 (>= 3.11), python3-websocket, python3-keyring, python3-secretstorage
+Depends: python3 (>= 3.11), python3-websocket, python3-keyring, python3-secretstorage, python3-gi, gir1.2-gtk-4.0
 Recommends: google-chrome-stable | chromium-browser | chromium
 Homepage: https://github.com/fdsouvenir/espn-fantasy-draft-bot
 Description: Read-only ESPN fantasy draft laptop companion

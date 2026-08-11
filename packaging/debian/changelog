@@ -13,3 +13,9 @@ draftside-companion (0.1.0-1) unstable; urgency=medium
   * Add reproducible builds, checksum verification, and clean removal checks.
 
  -- Draftside Contributors <maintainers@draftside.dev>  Tue, 11 Aug 2026 13:00:00 -0500
+draftside-companion (0.2.0-1) unstable; urgency=medium
+
+  * Connect automatically without configuration or pairing codes.
+  * Add a native status window and dashboard device revocation.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Tue, 11 Aug 2026 14:20:00 -0500

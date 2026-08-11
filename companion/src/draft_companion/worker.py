@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
 
-from .credentials import Credentials
+from .credentials import Credentials, DeviceCredentials
 
 
 def utc_now() -> str:
@@ -213,3 +213,109 @@ class WorkerClient:
         ):
             raise WorkerError("worker_heartbeat_invalid_ack")
         return ack
+
+
+class DeviceWorkerClient(WorkerClient):
+    """Per-install client that enrolls itself without shared service credentials."""
+
+    def __init__(
+        self,
+        worker_base: str,
+        credentials: DeviceCredentials,
+        timeout: float,
+        *,
+        opener=urllib.request.urlopen,
+        clock=time.time,
+        uuid4=uuid.uuid4,
+    ):
+        self.device = credentials
+        super().__init__(
+            worker_base,
+            "",
+            Credentials(credentials.device_token, "", ""),
+            timeout,
+            opener=opener,
+            clock=clock,
+            uuid4=uuid4,
+        )
+
+    def _device_headers(self) -> dict[str, str]:
+        return {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.device.device_token}",
+            "Content-Type": "application/json",
+            "User-Agent": "Draftside-Companion/0.2",
+            "X-Draftside-Device": self.device.device_id,
+        }
+
+    def enroll(self, name: str, version: str) -> Mapping[str, Any]:
+        body = canonical_json({"name": name[:80], "version": version[:32]})
+        request = urllib.request.Request(
+            self.base + "/api/v1/companion/register",
+            data=body,
+            headers=self._device_headers(),
+            method="POST",
+        )
+        try:
+            with self.opener(request, timeout=self.timeout) as response:
+                result = json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.code == 403:
+                raise WorkerError("device_revoked") from None
+            raise WorkerError(f"device_enrollment_http_{error.code}") from None
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
+            raise WorkerError("device_enrollment_network_error") from None
+        bootstrap = result.get("bootstrap") if isinstance(result, Mapping) else None
+        required = ("draftKey", "expectedTeams", "totalPickSlots", "draftSlotTeamIds", "draftUrl")
+        if not isinstance(bootstrap, Mapping) or any(key not in bootstrap for key in required):
+            raise WorkerError("device_enrollment_invalid_ack")
+        if (
+            not isinstance(bootstrap["draftKey"], str)
+            or not isinstance(bootstrap["expectedTeams"], int)
+            or not isinstance(bootstrap["totalPickSlots"], int)
+            or not isinstance(bootstrap["draftSlotTeamIds"], list)
+            or len(bootstrap["draftSlotTeamIds"]) != bootstrap["totalPickSlots"]
+            or not isinstance(bootstrap["draftUrl"], str)
+        ):
+            raise WorkerError("device_enrollment_invalid_ack")
+        self.draft_key = bootstrap["draftKey"]
+        return bootstrap
+
+    def health(self) -> Mapping[str, Any]:
+        raise WorkerError("device_health_requires_enrollment")
+
+    def _post(self, action: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        if action != "ingest":
+            raise WorkerError("device_action_not_supported")
+        encoded_key = urllib.parse.quote(self.draft_key, safe="")
+        pathname = f"/api/v1/drafts/{encoded_key}/companion-ingest"
+        body = canonical_json(payload)
+        headers = self._device_headers()
+        headers.update(
+            signed_headers(
+                self.device.device_token,
+                pathname,
+                body,
+                int(self.clock()),
+                str(self.uuid4()),
+            )
+        )
+        request = urllib.request.Request(
+            self.base + pathname, data=body, headers=headers, method="POST"
+        )
+        try:
+            with self.opener(request, timeout=self.timeout) as response:
+                result = json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.code == 403:
+                raise WorkerError("device_revoked") from None
+            raise WorkerError(f"worker_{action}_http_{error.code}") from None
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
+            raise WorkerError(f"worker_{action}_network_error") from None
+        if not isinstance(result, Mapping):
+            raise WorkerError(f"worker_{action}_invalid_ack")
+        return result
+
+    def initialize(self, payload: Mapping[str, Any]) -> None:
+        if payload.get("draftKey") != self.draft_key:
+            raise ValueError("bootstrap does not match enrolled draft")

@@ -9,6 +9,11 @@ if [ -z "$version" ]; then
 fi
 
 architecture=${DRAFTSIDE_DEB_ARCH:-amd64}
+dashboard_url=${DRAFTSIDE_DASHBOARD_URL:-https://draftside.example.com}
+case "$dashboard_url" in
+  https://*) ;;
+  *) echo "DRAFTSIDE_DASHBOARD_URL must be an https:// URL" >&2; exit 1 ;;
+esac
 SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-946684800}
 export SOURCE_DATE_EPOCH
 build_root=$(mktemp -d)
@@ -35,14 +40,17 @@ find "$package_root/usr/lib/python3/dist-packages" -type f -name '*.py[co]' -del
 find "$package_root/usr/lib/python3/dist-packages" -type d -exec chmod 0755 {} +
 find "$package_root/usr/lib/python3/dist-packages" -type f -exec chmod 0644 {} +
 
-for command in draftside-companion draftside-companion-setup draftside-companion-service draftside-companion-desktop; do
+for command in draftside-companion draftside-companion-setup draftside-companion-service draftside-companion-desktop draftside-companion-ui; do
   install -m 0755 "$root/packaging/debian/$command" "$package_root/usr/bin/$command"
 done
 install -m 0644 "$root/packaging/debian/draftside-companion.service" "$package_root/usr/lib/systemd/user/draftside-companion.service"
 install -m 0644 "$root/packaging/debian/draftside-companion.desktop" "$package_root/usr/share/applications/draftside-companion.desktop"
 install -m 0644 "$root/packaging/debian/draftside-companion.svg" "$package_root/usr/share/icons/hicolor/scalable/apps/draftside-companion.svg"
 install -m 0644 "$root/packaging/debian/com.draftside.companion.metainfo.xml" "$package_root/usr/share/metainfo/com.draftside.companion.metainfo.xml"
-install -m 0644 "$root/packaging/debian/config.example.toml" "$package_root/usr/share/draftside-companion/config.example.toml"
+sed "s|@DASHBOARD_URL@|$dashboard_url|g" \
+  "$root/packaging/debian/config.example.toml" \
+  > "$package_root/usr/share/draftside-companion/config.example.toml"
+chmod 0644 "$package_root/usr/share/draftside-companion/config.example.toml"
 install -m 0644 "$root/companion/README.md" "$package_root/usr/share/doc/draftside-companion/README.md"
 install -m 0644 "$root/LICENSE" "$package_root/usr/share/doc/draftside-companion/copyright"
 gzip -n -9 -c "$root/packaging/debian/changelog" > "$package_root/usr/share/doc/draftside-companion/changelog.Debian.gz"

@@ -8,8 +8,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from draft_companion.credentials import Credentials
-from draft_companion.worker import WorkerClient, WorkerError, signed_headers
+from draft_companion.credentials import Credentials, DeviceCredentials
+from draft_companion.worker import DeviceWorkerClient, WorkerClient, WorkerError, signed_headers
 
 
 def test_hmac_contract_is_deterministic():
@@ -130,3 +130,45 @@ def test_worker_rejects_partial_ack():
     )
     with pytest.raises(WorkerError, match="partial"):
         client.ingest({1: {"teamId": 1, "playerId": 2, "round": 1, "roundPick": 1}}, 1, True, "now")
+
+
+def test_device_client_enrolls_and_ingests_without_shared_access_credentials():
+    requests = []
+
+    def opener(request, timeout):
+        requests.append(request)
+        if request.full_url.endswith("/register"):
+            return Response(
+                {
+                    "bootstrap": {
+                        "draftKey": "draft:auto",
+                        "expectedTeams": 2,
+                        "totalPickSlots": 2,
+                        "draftSlotTeamIds": ["1", "2"],
+                        "draftUrl": "https://fantasy.espn.com/football/draft",
+                    }
+                }
+            )
+        payload = json.loads(request.data)
+        return Response(
+            {
+                "revision": 1,
+                "accepted": len(payload["events"]),
+                "deduped": 0,
+                "lastOverallPick": payload["cursor"]["lastOverallPick"],
+                "missingOverallPicks": [],
+            }
+        )
+
+    device = DeviceCredentials("00000000-0000-4000-8000-000000000001", "t" * 43)
+    client = DeviceWorkerClient(
+        "https://worker.example.com", device, 5, opener=opener, clock=lambda: 123
+    )
+    assert client.enroll("Fred's laptop", "0.2.0")["draftKey"] == "draft:auto"
+    client.heartbeat(0, 2)
+
+    assert requests[0].headers["Authorization"] == f"Bearer {device.device_token}"
+    assert requests[0].headers["X-draftside-device"] == device.device_id
+    assert requests[1].full_url.endswith("/api/v1/drafts/draft%3Aauto/companion-ingest")
+    assert "Cf-access-client-secret" not in requests[1].headers
+    assert requests[1].headers["X-draft-signature"].startswith("v1=")

@@ -11,6 +11,10 @@
       {
         "name": "DRAFT_SESSION",
         "class_name": "DraftSession"
+      },
+      {
+        "name": "COMPANION_REGISTRY",
+        "class_name": "CompanionRegistry"
       }
     ]
   },
@@ -18,6 +22,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["DraftSession"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["CompanionRegistry"]
     }
   ],
   "assets": {
@@ -38,7 +46,8 @@
   },
   "vars": {
     "ENVIRONMENT": "local",
-    "BUILD_VERSION": "dev"
+    "BUILD_VERSION": "dev",
+    "ACTIVE_DRAFT_KEY": "unconfigured"
   },
   "env": {
     "staging": {
@@ -50,6 +59,10 @@
           {
             "name": "DRAFT_SESSION",
             "class_name": "DraftSession"
+          },
+          {
+            "name": "COMPANION_REGISTRY",
+            "class_name": "CompanionRegistry"
           }
         ]
       },
@@ -61,7 +74,8 @@
       },
       "vars": {
         "ENVIRONMENT": "staging",
-        "BUILD_VERSION": "staging"
+        "BUILD_VERSION": "staging",
+        "ACTIVE_DRAFT_KEY": "staging:espn:ffl:2026:1588728530:1786464000000:live3"
       }
     }
   }

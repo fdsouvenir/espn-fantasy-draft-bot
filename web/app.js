@@ -31,8 +31,57 @@
     pickClock: document.querySelector("#pick-clock"),
     revisionLabel: document.querySelector("#revision-label"),
     buildLabel: document.querySelector("#build-label"),
-    modeLabel: document.querySelector("#mode-label")
+    modeLabel: document.querySelector("#mode-label"),
+    companionStatus: document.querySelector("#companion-status"),
+    companionDevices: document.querySelector("#companion-devices")
   };
+
+  async function loadCompanionDevices() {
+    if (!dom.companionDevices) return;
+    try {
+      const response = await fetch("/api/v1/companion/devices", {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (!response.ok) throw new Error(`device list ${response.status}`);
+      const payload = await response.json();
+      const devices = Array.isArray(payload.devices) ? payload.devices : [];
+      dom.companionDevices.replaceChildren();
+      dom.companionStatus.textContent = devices.some((device) => !device.revokedAt) ? "Connected" : "Not connected";
+      if (!devices.length) {
+        dom.companionDevices.append(node("p", "section-note", "Open the Draftside laptop app. It will appear here automatically."));
+        return;
+      }
+      devices.forEach((device) => {
+        const row = node("div", "companion-device");
+        const copy = node("div", "");
+        copy.append(node("strong", "", device.name || "Draft laptop"));
+        copy.append(node("span", "section-note", device.revokedAt ? "Revoked" : `Draftside ${device.version || ""} · connected`));
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = device.revokedAt ? "filter-button" : "filter-button danger-button";
+        action.textContent = device.revokedAt ? "Re-enable" : "Revoke";
+        action.addEventListener("click", async () => {
+          action.disabled = true;
+          const verb = device.revokedAt ? "enable" : "revoke";
+          const result = await fetch(`/api/v1/companion/devices/${encodeURIComponent(device.deviceId)}/${verb}`, {
+            cache: "no-store",
+            method: "POST",
+            credentials: "same-origin",
+            headers: { Accept: "application/json" }
+          });
+          if (!result.ok) action.disabled = false;
+          else await loadCompanionDevices();
+        });
+        row.append(copy, action);
+        dom.companionDevices.append(row);
+      });
+    } catch (_error) {
+      dom.companionStatus.textContent = "Unavailable";
+      dom.companionDevices.replaceChildren(node("p", "section-note", "Companion controls are unavailable right now."));
+    }
+  }
 
   const app = {
     snapshot: null,
@@ -577,6 +626,8 @@
     showDraftRequired();
   } else {
     showSkeletons();
+    loadCompanionDevices();
+    window.setInterval(loadCompanionDevices, 15_000);
     dom.modeLabel.textContent = mockMode ? "Sanitized mock mode" : `Draft ${draftKey}`;
     fetchSnapshot();
     if (!mockMode) connectSocket();

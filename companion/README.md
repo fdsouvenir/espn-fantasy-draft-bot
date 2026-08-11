@@ -1,224 +1,74 @@
 # Draftside Companion
 
-> Draftside's tiny, read-only bridge between the ESPN draft room already open on your laptop and its private decision-support backend.
+Draftside Companion is the small Ubuntu app that connects the ESPN draft room on your laptop to a private Draftside dashboard. It observes draft events only; it cannot queue players, submit picks, or change league settings.
 
-The companion keeps draft night to **one ESPN login and one draft-room session**. You draft normally in Chrome. This process observes only ESPN's incoming draft events through Chrome DevTools Protocol (CDP), normalizes the board, and sends signed updates to Cloudflare.
+## What using it feels like
 
-It does **not** require OpenClaw, automate selections, inspect cookies, retain or expose ESPN WebSocket endpoints, read outbound frames, or send commands to ESPN.
+1. Install the `.deb` and open **Draftside Companion**.
+2. Draftside opens its private dashboard and the ESPN draft room in a dedicated Chrome profile.
+3. Sign into ESPN normally if Chrome asks.
+4. The status window turns **Ready** when picks are flowing.
 
-```mermaid
-flowchart LR
-  ESPN[ESPN draft room] -->|incoming INIT + SELECTED| Chrome[Dedicated Chrome profile]
-  Chrome -->|local CDP on 127.0.0.1| Companion[Draft Companion]
-  Companion -->|HMAC + Access authenticated HTTPS| Worker[Private Cloudflare Worker]
-  Worker --> Dashboard[Draftside dashboard]
-```
+There is no pairing code, configuration editor, API key, TOML file, or terminal workflow. On first launch the app creates a random device identity in Ubuntu Secret Service and enrolls itself with the configured private Draftside deployment. The dashboard shows the laptop and provides **Revoke** and **Re-enable** controls.
 
-## What it handles
-
-- Launches or attaches to a dedicated Chrome/Chromium profile.
-- Arms read-only network observation before optionally reloading the draft tab.
-- Streams `SELECTED` events with signed ESPN player IDs, including negative D/ST IDs.
-- Treats `INIT` as the authoritative full-board recovery frame after a disconnect.
-- Reconnects automatically without advancing its checkpoint until Cloudflare acknowledges the board.
-- Writes owner-only (`0600`) checkpoint, health, and sanitized evidence files.
-- Exposes simple `preflight`, `start`, `status`, `stop`, and foreground `run` commands.
-- Loads secrets from the process environment or the operating system keyring—never from TOML.
-
-## Requirements
-
-- Python 3.11+
-- Google Chrome or Chromium
-- Windows 10/11, macOS, or Linux
-- A generated Draftside initializer JSON
-- Three workload credentials supplied by the operator:
-  - `INGEST_HMAC_CURRENT`
-  - `CF_ACCESS_CLIENT_ID`
-  - `CF_ACCESS_CLIENT_SECRET`
-
-The companion never needs your ESPN password or cookies. Sign in to ESPN yourself in its dedicated Chrome profile.
-
-## Install
-
-### Ubuntu 24.04 amd64 package
-
-Download the private release artifact and its checksum, then verify and install it:
+## Install on Ubuntu 24.04 amd64
 
 ```bash
-sha256sum -c draftside-companion_0.1.1-1_amd64.deb.sha256
-sudo apt install ./draftside-companion_0.1.1-1_amd64.deb
-draftside-companion-setup
+sha256sum -c draftside-companion_0.2.0-1_amd64.deb.sha256
+sudo apt install ./draftside-companion_0.2.0-1_amd64.deb
 ```
 
-The package installs the CLI, a GNOME application launcher, a user-level systemd service, the icon, and documentation. It creates no home-directory files during `apt install`, does not start automatically, and contains no league data or credentials.
-
-Private enrollment is interactive so secrets never enter shell history:
-
-```bash
-draftside-companion configure \
-  --worker-base 'https://private-draftside.example.com' \
-  --draft-key 'operator-supplied-draft-key' \
-  --initializer "$HOME/Downloads/draft-init.json"
-```
-
-The command validates and copies the initializer with mode `0600`, writes the non-secret routing config with mode `0600`, creates owner-only state/browser-profile directories, and prompts for the signing key and Cloudflare Access identity through the terminal's hidden-input path. Those values are stored in Ubuntu Secret Service via Python keyring, not TOML.
-
-After enrollment, launch **Draftside Companion** from GNOME or use:
-
-```bash
-draftside-companion preflight
-draftside-companion-service start
-draftside-companion status
-draftside-companion dashboard --open
-```
-
-Stop the user service with `draftside-companion-service stop` before removing the package. `apt remove` and `apt purge` intentionally leave the user's private config, initializer, checkpoint, keyring entries, and dedicated Chrome profile untouched. That prevents an upgrade or accidental uninstall from destroying draft recovery data.
-
-### Source installation
-
-Clone the repository, open a terminal in `companion/`, then create an isolated environment.
-
-### macOS / Linux
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install .
-cp config.example.toml companion.toml
-```
-
-### Windows PowerShell
-
-```powershell
-py -3.11 -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install .
-Copy-Item config.example.toml companion.toml
-```
-
-Edit `companion.toml` with the non-secret Worker URL, draft key, initializer path, and desired profile/state paths. The sample deliberately contains no credential fields.
-
-## Credentials
-
-### Option A: environment variables
-
-Set all three variables only in the terminal used to start the companion. Avoid putting them in shell profiles, `.env` files, command arguments, or screenshots.
-
-macOS/Linux:
-
-```bash
-export INGEST_HMAC_CURRENT='resolved-at-runtime'
-export CF_ACCESS_CLIENT_ID='resolved-at-runtime'
-export CF_ACCESS_CLIENT_SECRET='resolved-at-runtime'
-```
-
-Windows PowerShell:
-
-```powershell
-$env:INGEST_HMAC_CURRENT = 'resolved-at-runtime'
-$env:CF_ACCESS_CLIENT_ID = 'resolved-at-runtime'
-$env:CF_ACCESS_CLIENT_SECRET = 'resolved-at-runtime'
-```
-
-### Option B: OS keyring
-
-Install the optional integration and set `runtime.credential_source = "keyring"` in `companion.toml`:
-
-```bash
-python -m pip install '.[keyring]'
-```
-
-Store values under the configured service (default: `draftside-companion`) with usernames matching the three environment-variable names. Use your OS credential manager or a small `getpass`-based setup script so values do not enter shell history. The CLI only reports whether credentials are available; it never prints them.
-
-The Ubuntu `.deb` includes the distro-supported keyring and Secret Service dependencies and uses the interactive `configure` command instead.
-
-## Draft-night workflow
-
-1. Run the preflight:
-
-   ```bash
-   draft-companion --config companion.toml preflight
-   ```
-
-2. If Chrome is not already running for this companion, `start` launches a dedicated profile. Sign in to ESPN in that window and open the draft room. A first launch may report that the tab is not ready; sign in, then rerun `start`.
-
-   ```bash
-   draft-companion --config companion.toml start
-   ```
-
-3. Check health at any time:
-
-   ```bash
-   draft-companion --config companion.toml status
-   ```
-
-   States are `starting`, `live`, `reconnecting`, `complete`, or `stopped`. Output contains paths and counters, never credentials or ESPN session material.
-
-4. Stop cleanly:
-
-   ```bash
-   draft-companion --config companion.toml stop
-   ```
-
-For troubleshooting, run it in the foreground:
-
-```bash
-draft-companion --config companion.toml run
-```
-
-## Local files
-
-The configured state directory contains:
-
-- `health.json` — current state, process ID, pick count, reconnect count, and last commit duration.
-- `checkpoint.json` — last board acknowledged by Cloudflare; used for restart recovery.
-- `evidence.ndjson` — sanitized commit timing and recovery records.
-- `companion.log` — detached-process output.
-- `chrome-profile/` — the dedicated browser profile. Treat this directory as private browser data.
-
-Do not publish, sync, or commit the state directory. The repository root `.gitignore` should exclude local configuration, state, profiles, checkpoints, evidence, and initializer artifacts before the repository is made public.
-
-## Safety model
-
-The browser boundary is intentionally narrow:
-
-- CDP is explicitly bound to `127.0.0.1` and a dedicated profile.
-- The observer enables Chrome's Network domain, identifies only the expected `fantasydraft.espn.com` socket in memory, and reads received payloads beginning with `INIT` or `SELECTED`. Socket URLs are never retained or logged.
-- It does not call `Network.getCookies`, inspect request headers, retain debugger endpoints, subscribe to outgoing frames, or send ESPN application messages.
-- `Page.reload` is the only optional browser action; it is used after observation is armed so the complete recovery frame cannot race startup.
-- Every Cloudflare mutation is signed with a timestamped HMAC and a unique nonce, then separately authenticated through Cloudflare Access.
-- Secret values stay in memory and are excluded from URLs, exceptions, health, evidence, and checkpoints.
-
-The app is advisory infrastructure. The human manager remains the only actor who can select a player.
+Then open **Draftside Companion** from the application grid.
 
 ## Recovery behavior
 
-| Failure | Behavior |
-| --- | --- |
-| Laptop network interruption | Health becomes `reconnecting`; the companion reattaches and waits for ESPN `INIT`. |
-| Browser/tab reload | Full board is reconstructed from `INIT`, then replayed idempotently. |
-| Cloudflare timeout | No local checkpoint advances; the same deterministic picks are retried. |
-| Companion restart | Last acknowledged board loads from `checkpoint.json`; ESPN `INIT` reconciles current state. |
-| Unknown/malformed frame | It is ignored or triggers a sanitized reconnect; no ESPN command is sent. |
-| Conflicting draft order | Delivery stops and health reports a runtime error rather than silently corrupting the board. |
+- Chrome reload: the complete ESPN `INIT` board fills anything missed.
+- Wi-Fi interruption: local state is retained and replayed after reconnect.
+- App restart: the same device identity and checkpoint are reused.
+- Revoked laptop: ingestion stops and the status window says **Access revoked**.
+- Duplicate events: the backend acknowledges them without double-counting.
+
+Keep the laptop awake, online, and signed into the ESPN draft room during the draft.
+
+## Advanced diagnostics
+
+The CLI remains available for support and development:
+
+```bash
+draftside-companion status
+draftside-companion preflight
+draftside-companion-service restart
+journalctl --user -u draftside-companion.service
+```
+
+Runtime state is owner-only under `~/.local/state/draftside-companion`. The dedicated Chrome profile lives under `~/.local/share/draftside-companion`. Neither location belongs in source control or cloud sync.
+
+## Security model
+
+- The dashboard and device controls remain behind Cloudflare Access.
+- The narrow companion registration/ingestion paths accept per-device credentials.
+- Each installation generates its own token; only its SHA-256 verifier is stored server-side.
+- Event bodies are HMAC-signed with timestamps and unique nonces.
+- Revocation is immediate and does not affect ESPN credentials.
+- No shared Cloudflare service token, global ingest key, ESPN cookie, or league secret is packaged or committed.
+
+The endpoint URL is intentionally not treated as a secret. This is a personal fantasy-football tool, not a general-purpose identity platform.
 
 ## Development
 
-Tests use fake CDP sockets, fake Chrome launchers, fake credentials, and fake HTTP responses. They never connect to ESPN or Cloudflare.
-
 ```bash
-python -m pip install -e '.[dev]'
-pytest
+python -m venv .venv
+. .venv/bin/activate
+pip install -e './companion[dev,keyring]'
+pytest companion/tests
+ruff check companion/src companion/tests
 ```
 
-The package intentionally depends only on `websocket-client` at runtime. Keyring support is optional.
+Build the Ubuntu package from the repository root:
 
-## Portfolio notes
+```bash
+packaging/debian/test-package.sh
+```
 
-This directory is designed to stand on its own as a public engineering sample: small dependency surface, documented trust boundaries, deterministic HMAC contract, atomic state persistence, failure recovery, and platform-neutral operation. Before publishing the parent repository, remove or sanitize real league identifiers, generated initializers, evidence, screenshots, deployment names, and account-specific links elsewhere in the repository.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+Release maintainers can bake in their deployment's non-secret endpoint with
+`DRAFTSIDE_DASHBOARD_URL=https://draftside.example.com packaging/debian/build-deb.sh`.

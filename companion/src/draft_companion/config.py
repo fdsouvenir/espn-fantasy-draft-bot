@@ -30,8 +30,8 @@ class RuntimeConfig:
 @dataclass(frozen=True)
 class Config:
     worker_base: str
-    draft_key: str
-    init_file: Path
+    draft_key: str | None
+    init_file: Path | None
     draft_url: str
     chrome: ChromeConfig
     runtime: RuntimeConfig
@@ -76,10 +76,10 @@ def load_config(path: Path) -> Config:
         or worker_url.path not in {"", "/"}
     ):
         raise ValueError("worker_base must be an https URL")
-    draft_key = raw.get("draft_key")
-    if not isinstance(draft_key, str) or not draft_key.strip():
-        raise ValueError("draft_key is required")
-    draft_url = raw.get("draft_url")
+    draft_key = raw.get("draft_key") or None
+    if draft_key is not None and (not isinstance(draft_key, str) or not draft_key.strip()):
+        raise ValueError("draft_key must be a non-empty string")
+    draft_url = raw.get("draft_url", "https://fantasy.espn.com/football/draft")
     parsed_draft_url = urlparse(draft_url) if isinstance(draft_url, str) else None
     if (
         parsed_draft_url is None
@@ -95,9 +95,9 @@ def load_config(path: Path) -> Config:
     debug_port = int(chrome.get("debug_port", 9222))
     if not 1024 <= debug_port <= 65535:
         raise ValueError("chrome.debug_port must be between 1024 and 65535")
-    credential_source = str(runtime.get("credential_source", "environment"))
-    if credential_source not in {"environment", "keyring"}:
-        raise ValueError("runtime.credential_source must be environment or keyring")
+    credential_source = str(runtime.get("credential_source", "device"))
+    if credential_source not in {"device", "environment", "keyring"}:
+        raise ValueError("runtime.credential_source must be device, environment, or keyring")
     reconnect = float(runtime.get("reconnect_seconds", 2.0))
     heartbeat = float(runtime.get("heartbeat_seconds", 15.0))
     stale = float(runtime.get("health_stale_seconds", 45.0))
@@ -108,7 +108,11 @@ def load_config(path: Path) -> Config:
     return Config(
         worker_base=worker_base,
         draft_key=draft_key,
-        init_file=_path(base, raw.get("init_file"), "init_file"),
+        init_file=(
+            _path(base, raw.get("init_file"), "init_file")
+            if raw.get("init_file") is not None
+            else None
+        ),
         draft_url=draft_url,
         chrome=ChromeConfig(
             executable=str(executable) if executable else None,

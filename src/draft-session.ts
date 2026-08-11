@@ -282,6 +282,25 @@ export class DraftSession extends DurableObject<Env> {
     return meta ? this.health(meta, this.pickRows()) : this.uninitializedSnapshot().health;
   }
 
+  getCompanionConfig(): {
+    draftKey: string;
+    expectedTeams: number;
+    totalPickSlots: number;
+    draftSlotTeamIds: string[];
+    draftUrl: string;
+  } {
+    const meta = this.meta();
+    const context = this.context();
+    if (!meta || !context) throw new Error("draft_uninitialized");
+    return {
+      draftKey: meta.draft_key,
+      expectedTeams: context.expectedTeams,
+      totalPickSlots: meta.total_pick_slots,
+      draftSlotTeamIds: context.draftSlotTeamIds,
+      draftUrl: "https://fantasy.espn.com/football/draft",
+    };
+  }
+
   override async fetch(_request: Request): Promise<Response> {
     const pair = new WebSocketPair();
     const client = pair[0];

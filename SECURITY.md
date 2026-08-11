@@ -26,18 +26,18 @@ Please allow maintainers a reasonable opportunity to investigate and release a f
 
 A secure live deployment should:
 
-- protect every application route with an identity-aware proxy such as Cloudflare Access;
+- protect the dashboard and all device-administration routes with an identity-aware proxy such as Cloudflare Access;
 - disable alternate public Worker URLs and preview URLs;
-- give the companion a scoped service identity separate from human access;
-- require an independent HMAC signature over every exact ingestion body;
+- expose only the bounded companion registration and ingestion routes needed by the app;
+- give every companion installation its own revocable device identity;
+- require an HMAC signature over every exact ingestion body;
 - enforce timestamp windows, nonce replay protection, request-size limits, schema validation, and bounded event counts;
-- store Worker keys in platform secret storage and laptop credentials in the operating system credential store;
-- rotate Access and HMAC credentials independently;
+- store device tokens only in the operating system credential store and only token verifiers server-side;
 - use sanitized structured logging and avoid raw request bodies;
 - keep real draft routes, fixtures, checkpoints, catalogs, and evidence out of the public repository;
 - verify anonymous denial and authenticated access before each live draft.
 
-Cloudflare Access and HMAC solve different problems. Access restricts who may reach the application; HMAC proves that an allowed client produced an unmodified event body. Do not remove one because the other exists.
+Cloudflare Access protects the human dashboard and device controls. Per-device authentication and HMAC protect the narrow laptop API. Revoking one laptop must not affect browser access or other devices.
 
 ## Secret-handling rules
 
@@ -46,8 +46,7 @@ Never place any of the following in Git, command-line arguments, URLs, screensho
 - ESPN passwords or session cookies;
 - authenticated draft socket URLs or security tokens;
 - Cloudflare API credentials;
-- Access client secrets;
-- ingestion HMAC keys;
+- companion device tokens;
 - real environment files;
 - private league, owner, or account identifiers.
 

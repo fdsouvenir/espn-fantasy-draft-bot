@@ -6,6 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+ExecStartPre=/usr/bin/draftside-companion-setup --quiet
 ExecStart=/usr/bin/draftside-companion run
 Restart=on-failure
 RestartSec=2

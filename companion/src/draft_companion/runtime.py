@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import signal
 import tempfile
 import time
@@ -12,9 +13,9 @@ from typing import Any
 
 from .cdp import FrameSource, discover_chrome, launch_chrome, list_tabs
 from .config import Config
-from .credentials import load_credentials
+from .credentials import load_credentials, load_or_create_device
 from .frames import DecodeError, decode_init_picks, selected_frame
-from .worker import WorkerClient, utc_now
+from .worker import DeviceWorkerClient, WorkerClient, WorkerError, utc_now
 
 
 def atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -83,16 +84,19 @@ class Companion:
         frame_factory=FrameSource,
         worker_factory=WorkerClient,
         credential_loader=load_credentials,
+        device_loader=load_or_create_device,
         sleeper=time.sleep,
     ):
         self.config, self.frame_factory, self.worker_factory = config, frame_factory, worker_factory
-        self.credential_loader, self.sleeper = credential_loader, sleeper
+        self.credential_loader, self.device_loader, self.sleeper = (
+            credential_loader,
+            device_loader,
+            sleeper,
+        )
         self.stopping = False
         self.picks: dict[int, dict[str, int]] = {}
-        if config.checkpoint_file.exists():
-            stored = json.loads(config.checkpoint_file.read_text(encoding="utf-8"))
-            if stored.get("draftKey") == config.draft_key:
-                self.picks = {int(p["pickNumber"]): p for p in stored.get("picks", [])}
+        self.draft_key = config.draft_key
+        self.dashboard_url = config.worker_base
 
     def _health(self, state: str, **fields: Any) -> None:
         allowed = {
@@ -102,6 +106,8 @@ class Companion:
             "reconnects",
             "reason",
             "workerRevision",
+            "dashboardUrl",
+            "message",
         }
         value = {"schemaVersion": 1, "state": state, "updatedAt": utc_now(), "pid": os.getpid()}
         value.update({k: v for k, v in fields.items() if k in allowed})
@@ -112,7 +118,7 @@ class Companion:
             self.config.checkpoint_file,
             {
                 "schemaVersion": 1,
-                "draftKey": self.config.draft_key,
+                "draftKey": self.draft_key,
                 "picks": [self.picks[k] for k in sorted(self.picks)],
             },
         )
@@ -121,27 +127,63 @@ class Companion:
         self.stopping = True
 
     def run(self) -> None:
-        init = load_initializer(self.config.init_file, self.config.draft_key)
-        creds = self.credential_loader(
-            self.config.runtime.credential_source, self.config.runtime.keyring_service
-        )
-        worker = self.worker_factory(
-            self.config.worker_base,
-            self.config.draft_key,
-            creds,
-            self.config.runtime.request_timeout_seconds,
-        )
-        worker.initialize(init)
+        if self.config.runtime.credential_source == "device":
+            device = self.device_loader(self.config.runtime.keyring_service)
+            worker = DeviceWorkerClient(
+                self.config.worker_base,
+                device,
+                self.config.runtime.request_timeout_seconds,
+            )
+            try:
+                bootstrap = worker.enroll(platform.node() or "Draft laptop", "0.2.0")
+            except WorkerError as error:
+                state = "revoked" if str(error) == "device_revoked" else "reconnecting"
+                self._health(state, message=str(error), dashboardUrl=self.dashboard_url)
+                raise
+            self.draft_key = str(bootstrap["draftKey"])
+            draft_url = str(bootstrap["draftUrl"])
+            init = {
+                "schemaVersion": 1,
+                "draftKey": self.draft_key,
+                "expectedTeams": int(bootstrap["expectedTeams"]),
+                "totalPickSlots": int(bootstrap["totalPickSlots"]),
+                "draftSlotTeamIds": bootstrap["draftSlotTeamIds"],
+            }
+            self.dashboard_url = f"{self.config.worker_base}/?draft={self.draft_key}"
+        else:
+            if self.config.init_file is None or self.config.draft_key is None:
+                raise ValueError("legacy credentials require draft_key and init_file")
+            init = load_initializer(self.config.init_file, self.config.draft_key)
+            creds = self.credential_loader(
+                self.config.runtime.credential_source, self.config.runtime.keyring_service
+            )
+            worker = self.worker_factory(
+                self.config.worker_base,
+                self.config.draft_key,
+                creds,
+                self.config.runtime.request_timeout_seconds,
+            )
+            worker.initialize(init)
+            draft_url = self.config.draft_url
+        if self.config.checkpoint_file.exists():
+            stored = json.loads(self.config.checkpoint_file.read_text(encoding="utf-8"))
+            if stored.get("draftKey") == self.draft_key:
+                self.picks = {int(p["pickNumber"]): p for p in stored.get("picks", [])}
         signal.signal(signal.SIGTERM, self.stop)
         signal.signal(signal.SIGINT, self.stop)
         reconnects = 0
-        self._health("starting", filledPicks=len(self.picks), totalPicks=init["totalPickSlots"])
+        self._health(
+            "starting",
+            filledPicks=len(self.picks),
+            totalPicks=init["totalPickSlots"],
+            dashboardUrl=self.dashboard_url,
+        )
         while not self.stopping:
             source = None
             try:
                 source = self.frame_factory(
                     self.config.chrome.debug_port,
-                    self.config.draft_url,
+                    draft_url,
                     self.config.chrome.reload_on_attach,
                 )
                 last_delivery = time.monotonic()
@@ -151,6 +193,7 @@ class Companion:
                     filledPicks=len(self.picks),
                     totalPicks=init["totalPickSlots"],
                     reconnects=reconnects,
+                    dashboardUrl=self.dashboard_url,
                 )
                 while not self.stopping:
                     changed_at = None
@@ -195,6 +238,7 @@ class Companion:
                                 totalPicks=init["totalPickSlots"],
                                 reconnects=reconnects,
                                 workerRevision=ack["revision"],
+                                dashboardUrl=self.dashboard_url,
                             )
                         continue
                     observed = (
@@ -231,6 +275,7 @@ class Companion:
                         reconnects=reconnects,
                         lastCommitMs=duration,
                         workerRevision=ack["revision"],
+                        dashboardUrl=self.dashboard_url,
                     )
                     if complete:
                         self.stopping = True
@@ -242,6 +287,7 @@ class Companion:
                     totalPicks=init["totalPickSlots"],
                     reconnects=reconnects,
                     reason=error.__class__.__name__,
+                    dashboardUrl=self.dashboard_url,
                 )
                 if not self.stopping:
                     self.sleeper(self.config.runtime.reconnect_seconds)
@@ -256,6 +302,7 @@ class Companion:
             filledPicks=len(self.picks),
             totalPicks=init["totalPickSlots"],
             reconnects=reconnects,
+            dashboardUrl=self.dashboard_url,
         )
 
 

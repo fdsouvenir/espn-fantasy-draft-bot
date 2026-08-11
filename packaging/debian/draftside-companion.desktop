@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
 Name=Draftside Companion
-Comment=Start the read-only fantasy draft companion
-Exec=draftside-companion-desktop
+Comment=Connect ESPN to your private Draftside war room
+Exec=draftside-companion-ui
 Icon=draftside-companion
-Terminal=true
+Terminal=false
 Categories=Utility;
 Keywords=fantasy;football;draft;ESPN;
 StartupNotify=true

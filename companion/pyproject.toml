@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "draftside-companion"
-version = "0.1.1"
+version = "0.2.0"
 description = "Draftside's read-only laptop companion for ESPN fantasy drafts"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,7 @@ dev = ["pytest>=8,<9", "ruff>=0.12,<1"]
 
 [project.scripts]
 draft-companion = "draft_companion.cli:main"
+draftside-companion-ui = "draft_companion.ui:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/draft_companion"]

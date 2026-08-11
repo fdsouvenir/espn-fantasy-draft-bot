@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import secrets
+import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
@@ -11,6 +13,12 @@ class Credentials:
     ingest_hmac: str
     access_client_id: str
     access_client_secret: str
+
+
+@dataclass(frozen=True)
+class DeviceCredentials:
+    device_id: str
+    device_token: str
 
 
 class KeyringLike(Protocol):
@@ -99,3 +107,49 @@ def store_credentials(
         )
         raise RuntimeError(message) from error
     return credentials
+
+
+def load_or_create_device(
+    service: str,
+    *,
+    keyring: KeyringLike | None = None,
+) -> DeviceCredentials:
+    """Return this installation's revocable identity, creating it on first launch."""
+    if keyring is None:
+        try:
+            import keyring as imported_keyring
+        except ImportError as error:
+            raise RuntimeError("install the keyring extra to store the device identity") from error
+        keyring = imported_keyring
+    device_id = keyring.get_password(service, "DEVICE_ID")
+    device_token = keyring.get_password(service, "DEVICE_TOKEN")
+    if device_id and device_token:
+        try:
+            uuid.UUID(device_id)
+        except ValueError as error:
+            raise RuntimeError("stored device identity is invalid") from error
+        if len(device_token) < 32:
+            raise RuntimeError("stored device token is invalid")
+        return DeviceCredentials(device_id, device_token)
+    if device_id or device_token:
+        raise RuntimeError("stored device identity is incomplete")
+    created = DeviceCredentials(str(uuid.uuid4()), secrets.token_urlsafe(32))
+    changed: list[str] = []
+    try:
+        keyring.set_password(service, "DEVICE_ID", created.device_id)
+        changed.append("DEVICE_ID")
+        keyring.set_password(service, "DEVICE_TOKEN", created.device_token)
+    except Exception as error:
+        rollback_failed = False
+        for name in reversed(changed):
+            try:
+                keyring.delete_password(service, name)
+            except Exception:  # noqa: BLE001 - best-effort rollback across keyring backends
+                rollback_failed = True
+        message = (
+            "device identity storage failed and rollback was incomplete"
+            if rollback_failed
+            else "device identity could not be stored"
+        )
+        raise RuntimeError(message) from error
+    return created

@@ -4,6 +4,7 @@ import argparse
 import getpass
 import json
 import os
+import platform
 import shutil
 import signal
 import subprocess
@@ -16,9 +17,9 @@ from urllib.parse import urlencode
 
 from .cdp import discover_chrome, list_tabs
 from .config import Config, load_config
-from .credentials import load_credentials, store_credentials
+from .credentials import load_credentials, load_or_create_device, store_credentials
 from .runtime import Companion, atomic_json, ensure_chrome, load_initializer, process_alive
-from .worker import WorkerClient
+from .worker import DeviceWorkerClient, WorkerClient
 
 
 def _pid(config: Config) -> int | None:
@@ -54,17 +55,30 @@ def _status(config: Config) -> dict[str, object]:
 def preflight(
     config: Config, *, credential_loader=load_credentials, worker_factory=WorkerClient
 ) -> dict[str, object]:
-    load_initializer(config.init_file, config.draft_key)
-    credentials = credential_loader(
-        config.runtime.credential_source, config.runtime.keyring_service
-    )
-    worker = worker_factory(
-        config.worker_base,
-        config.draft_key,
-        credentials,
-        config.runtime.request_timeout_seconds,
-    )
-    worker.health()
+    if config.runtime.credential_source == "device":
+        device = load_or_create_device(config.runtime.keyring_service)
+        worker = DeviceWorkerClient(
+            config.worker_base, device, config.runtime.request_timeout_seconds
+        )
+        bootstrap = worker.enroll(platform.node() or "Draft laptop", "0.2.0")
+        initializer = f"automatic:{bootstrap['draftKey']}"
+        credential_status = "device_enrolled"
+    else:
+        if config.init_file is None or config.draft_key is None:
+            raise ValueError("legacy credentials require draft_key and init_file")
+        load_initializer(config.init_file, config.draft_key)
+        credentials = credential_loader(
+            config.runtime.credential_source, config.runtime.keyring_service
+        )
+        worker = worker_factory(
+            config.worker_base,
+            config.draft_key,
+            credentials,
+            config.runtime.request_timeout_seconds,
+        )
+        worker.health()
+        initializer = "valid"
+        credential_status = "available"
     executable = discover_chrome(config.chrome.executable)
     config.runtime.state_directory.mkdir(parents=True, exist_ok=True)
     os.chmod(config.runtime.state_directory, 0o700)
@@ -79,8 +93,8 @@ def preflight(
         "ok": True,
         "chrome": Path(executable).name,
         "cdp": cdp,
-        "initializer": "valid",
-        "credentials": "available",
+        "initializer": initializer,
+        "credentials": credential_status,
         "backend": "healthy",
         "stateDirectory": str(config.runtime.state_directory),
     }
@@ -196,7 +210,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="draft-companion", description="Read-only ESPN draft laptop companion"
     )
-    parser.add_argument("--config", type=Path, default=Path("companion.toml"))
+    default_config = Path(
+        os.environ.get(
+            "DRAFTSIDE_CONFIG",
+            "~/.config/draftside-companion/companion.toml",
+        )
+    ).expanduser()
+    parser.add_argument("--config", type=Path, default=default_config)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("preflight")
     sub.add_parser("start")
@@ -238,7 +258,20 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "status":
             result = _status(config)
         elif args.command == "dashboard":
-            url = f"{config.worker_base}/?{urlencode({'draft': config.draft_key})}"
+            try:
+                health = json.loads(config.health_file.read_text(encoding="utf-8"))
+            except (FileNotFoundError, ValueError):
+                health = {}
+            enrolled_url = health.get("dashboardUrl") if isinstance(health, dict) else None
+            url = (
+                enrolled_url
+                if isinstance(enrolled_url, str) and enrolled_url.startswith("https://")
+                else (
+                    f"{config.worker_base}/?{urlencode({'draft': config.draft_key})}"
+                    if config.draft_key
+                    else config.worker_base
+                )
+            )
             if args.open_browser and not webbrowser.open(url):
                 raise RuntimeError("dashboard could not be opened")
             result = {"ok": True, "opened": args.open_browser, "url": url}
