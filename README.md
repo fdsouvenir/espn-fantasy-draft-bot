@@ -14,7 +14,7 @@ It is deliberately a **copilot, not an autopilot**: Draftside never submits a pi
 
 Most draft tools start with a static rankings list and gradually become wrong as the room moves. Draftside instead treats the live draft as a state-coordination problem:
 
-- ingest every selection from the draft room with sub-second delivery;
+- ingest selections from the draft room through a low-latency live path;
 - keep one authoritative, replayable board;
 - update every roster and the available-player pool atomically;
 - rank the next decision using the actual roster, tier landscape, roles, workload, and market cost;
@@ -27,7 +27,7 @@ Most draft tools start with a static rankings list and gradually become wrong as
 - **Strongly consistent state.** One SQLite-backed Cloudflare Durable Object owns each draft's picks, rosters, availability, health, and recommendations.
 - **Deterministic recommendations.** The same versioned catalog and draft state always produce the same ranking, including explainable roster need, tier, role, workload, injury, and value signals.
 - **Fail-closed guidance.** Gaps, conflicts, stale ingestion, and unknown players suppress recommendations instead of producing confident nonsense.
-- **Private by default.** Cloudflare Access protects the application; ingestion also requires signed, replay-resistant HMAC requests.
+- **Designed for private operation.** A live deployment sits behind Cloudflare Access; ingestion also requires signed, replay-resistant HMAC requests.
 - **Responsive dashboard.** The live board, best available players, roster needs, health, and experimental return estimates work across desktop and mobile layouts.
 
 ## How it fits together
@@ -56,7 +56,7 @@ Read the detailed [architecture](docs/architecture.md) and [laptop companion des
 
 A controlled, disposable 64-pick draft validated the end-to-end path:
 
-- 19 consecutive selections reached committed cloud state through the live path with a measured frame-receipt-to-commit p95/max latency of **739 ms**;
+- 19 consecutive selections reached committed cloud state through the live path with an observed frame-receipt-to-commit p95 and maximum latency of **739 ms**;
 - after a deliberate browser reload, the complete **64/64** board was recovered from reconnect state in **164 ms**;
 - all selections were reconciled with zero gaps or conflicts, including defense/special-teams entries that use signed negative ESPN IDs.
 
@@ -90,11 +90,17 @@ Every recommendation carries reasons. “Likely to return” values are explicit
 
 ```bash
 npm ci
-python3 -m pip install -e './companion[dev,keyring]'
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install -e './companion[dev,keyring]'
 npm run check
+python -m pytest companion/tests
 ```
 
-`npm run check` generates Worker bindings, type-checks, lints, runs the TypeScript and Python suites, checks browser JavaScript syntax, and performs a Cloudflare deployment dry run.
+`npm run check` generates Worker bindings, type-checks, lints, runs the Worker and data-pipeline suites, checks browser JavaScript syntax, and performs a Cloudflare deployment dry run. The final command separately verifies the installable laptop companion.
+
+Windows installation and draft-night commands are documented in the [companion guide](companion/README.md).
 
 ### Run locally
 
@@ -124,17 +130,28 @@ tests/     Worker integration, ranking, validation, and Python pipeline tests
 docs/      Architecture and companion design
 ```
 
-## Public-demo boundary
+## Repository and deployment boundary
 
-This repository can be public; a real deployment should not be.
+Draftside uses one source repository for development and releases. Production does **not** need a second repository: a deployment is a private, configured instance of this code, not a separate codebase.
+
+The repository may be public; the deployed application and real draft data must remain access-controlled.
 
 - Use `?mock=1` or sanitized fixtures for screenshots, demos, and portfolio material.
 - Keep real league IDs, team names, draft keys, catalog releases, evidence files, checkpoints, and source payloads out of Git.
 - Never expose ESPN cookies, Cloudflare Access credentials, HMAC keys, authenticated socket details, or environment files.
-- Keep deployed draft routes behind an identity-aware access policy and disable alternate public Worker URLs.
+- Supply environment-specific routes, Access policy, secrets, and real draft initializers through private deployment configuration—not a second production repository.
+- Keep every deployed draft route behind an identity-aware access policy and disable alternate public Worker URLs.
 - Do not use the project to automate drafting or bypass access controls.
 
 See [SECURITY.md](SECURITY.md) before deploying or publishing a fork.
+
+## Operational caveats
+
+- ESPN's draft-room transport is undocumented and may change without notice.
+- The companion laptop must remain awake and online during the draft; reconnect state recovers missed selections after an interruption.
+- Use one ESPN draft-room session on the drafting laptop rather than depending on concurrent sessions for the same manager.
+- Keep a manual board-update fallback and verify the live board before acting on recommendations.
+- Return estimates are decision-support signals, not calibrated guarantees.
 
 ## Contributing
 
