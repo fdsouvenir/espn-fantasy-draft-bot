@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
-from draft_companion.config import load_config
+from draft_companion.config import (
+    SetupRequiredError,
+    dashboard_candidate,
+    dashboard_setup_required,
+    load_config,
+    write_device_config,
+)
 from draft_companion.credentials import (
     Credentials,
     load_credentials,
@@ -17,7 +24,8 @@ def write_config(
     tmp_path: Path, *, worker: str = "https://worker.example.com", source: str = "environment"
 ) -> Path:
     path = tmp_path / "companion.toml"
-    path.write_text(f'''worker_base = "{worker}"
+    path.write_text(f'''dashboard_configured_by_user = true
+worker_base = "{worker}"
 draft_key = "draft:test"
 init_file = "init.json"
 draft_url = "https://fantasy.espn.com/football/draft"
@@ -70,7 +78,8 @@ def test_config_rejects_non_espn_draft_url(tmp_path: Path):
 def test_auto_config_needs_only_private_endpoint_and_local_paths(tmp_path: Path):
     path = tmp_path / "companion.toml"
     path.write_text(
-        f'''worker_base = "https://draftside.example.com"
+        f'''dashboard_configured_by_user = true
+worker_base = "https://draftside.example.com"
 [chrome]
 profile_directory = "{(tmp_path / "profile").as_posix()}"
 [runtime]
@@ -83,6 +92,55 @@ credential_source = "device"
     assert config.draft_key is None
     assert config.init_file is None
     assert config.draft_url == "https://fantasy.espn.com/football/draft"
+
+
+def test_legacy_config_requires_user_confirmation(tmp_path: Path):
+    path = tmp_path / "companion.toml"
+    path.write_text(
+        f'''worker_base = "https://old-build.example.com"
+[chrome]
+profile_directory = "{(tmp_path / "profile").as_posix()}"
+[runtime]
+state_directory = "{(tmp_path / "state").as_posix()}"
+credential_source = "keyring"
+'''
+    )
+
+    assert dashboard_setup_required(path)
+    assert dashboard_candidate(path) == "https://old-build.example.com"
+    with pytest.raises(SetupRequiredError, match="confirm"):
+        load_config(path)
+
+
+def test_user_dashboard_config_is_saved_owner_only(tmp_path: Path, monkeypatch):
+    config_path = tmp_path / "config/draftside-companion/companion.toml"
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+
+    assert write_device_config(config_path, " https://private.example.com/ ") == (
+        "https://private.example.com"
+    )
+
+    config = load_config(config_path)
+    assert config.worker_base == "https://private.example.com"
+    assert config.runtime.credential_source == "device"
+    assert not dashboard_setup_required(config_path)
+    if os.name != "nt":
+        assert config_path.stat().st_mode & 0o077 == 0
+
+
+def test_confirming_upgrade_keeps_a_backup(tmp_path: Path, monkeypatch):
+    config_path = tmp_path / "config/draftside-companion/companion.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('worker_base = "https://old-build.example.com"\n')
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+
+    write_device_config(config_path, "https://user-entered.example.com")
+
+    backup = config_path.with_name("companion.toml.pre-0.3.0")
+    assert "old-build.example.com" in backup.read_text()
+    assert load_config(config_path).worker_base == "https://user-entered.example.com"
 
 
 def test_environment_credentials_are_loaded_without_transformation():

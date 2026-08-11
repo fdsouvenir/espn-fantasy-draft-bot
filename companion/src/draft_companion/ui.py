@@ -6,6 +6,16 @@ import subprocess
 import webbrowser
 from pathlib import Path
 
+from .config import dashboard_candidate, dashboard_setup_required, write_device_config
+
+
+def _config_path() -> Path:
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
+    configured = os.environ.get(
+        "DRAFTSIDE_CONFIG", str(config_home / "draftside-companion/companion.toml")
+    )
+    return Path(configured).expanduser()
+
 
 def _health_path() -> Path:
     state_home = Path(os.environ.get("XDG_STATE_HOME", "~/.local/state")).expanduser()
@@ -29,21 +39,100 @@ def main() -> int:
     except (ImportError, ValueError) as error:
         raise SystemExit(f"Draftside's desktop interface is unavailable: {error}") from error
 
-    subprocess.run(
-        ["systemctl", "--user", "enable", "--now", "draftside-companion.service"],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
     class DraftsideApp(Gtk.Application):
         def __init__(self):
             super().__init__(application_id="com.draftside.Companion")
+            self.refresh_source = None
 
-        def do_activate(self):
-            window = Gtk.ApplicationWindow(application=self)
-            window.set_title("Draftside Companion")
-            window.set_default_size(520, 360)
+        @staticmethod
+        def service(action: str):
+            subprocess.run(
+                ["systemctl", "--user", action, "draftside-companion.service"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+        @staticmethod
+        def reload_units():
+            subprocess.run(
+                ["systemctl", "--user", "daemon-reload"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+        def clear_refresh(self):
+            if self.refresh_source is not None:
+                GLib.source_remove(self.refresh_source)
+                self.refresh_source = None
+
+        def show_setup(self, window):
+            self.clear_refresh()
+            self.service("stop")
+            outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+            outer.set_margin_top(32)
+            outer.set_margin_bottom(32)
+            outer.set_margin_start(32)
+            outer.set_margin_end(32)
+
+            title = Gtk.Label(label="Connect your private Draftside dashboard")
+            title.add_css_class("title-1")
+            title.set_wrap(True)
+            title.set_xalign(0)
+            outer.append(title)
+
+            copy = Gtk.Label(
+                label="Enter its HTTPS address. Draftside saves it only on this laptop."
+            )
+            copy.set_wrap(True)
+            copy.set_xalign(0)
+            outer.append(copy)
+
+            entry = Gtk.Entry()
+            entry.set_placeholder_text("https://your-dashboard-host")
+            entry.set_text(dashboard_candidate(_config_path()))
+            entry.set_hexpand(True)
+            outer.append(entry)
+
+            error = Gtk.Label()
+            error.add_css_class("error")
+            error.set_wrap(True)
+            error.set_xalign(0)
+            outer.append(error)
+
+            connect = Gtk.Button(label="Connect Dashboard")
+            connect.add_css_class("suggested-action")
+            outer.append(connect)
+
+            note = Gtk.Label(
+                label="Draftside will open a separate Chrome window. Sign into ESPN and use the draft room in that window."
+            )
+            note.set_wrap(True)
+            note.set_xalign(0)
+            outer.append(note)
+
+            def save(_widget):
+                try:
+                    write_device_config(_config_path(), entry.get_text())
+                except (OSError, TypeError, ValueError) as problem:
+                    error.set_label(str(problem))
+                    return
+                try:
+                    _health_path().unlink()
+                except FileNotFoundError:
+                    pass
+                self.service("enable")
+                self.show_status(window)
+
+            connect.connect("clicked", save)
+            entry.connect("activate", save)
+            window.set_child(outer)
+
+        def show_status(self, window):
+            self.clear_refresh()
+            self.service("enable")
+            self.service("restart")
 
             outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
             outer.set_margin_top(32)
@@ -58,7 +147,7 @@ def main() -> int:
             outer.append(title)
 
             subtitle = Gtk.Label(
-                label="Keep this laptop awake with the ESPN draft room open. Draftside connects automatically."
+                label="Use the ESPN draft room in the separate Chrome window opened by Draftside."
             )
             subtitle.set_wrap(True)
             subtitle.set_xalign(0)
@@ -83,9 +172,11 @@ def main() -> int:
             dashboard.add_css_class("suggested-action")
             reconnect = Gtk.Button(label="Reconnect")
             stop = Gtk.Button(label="Stop")
+            change = Gtk.Button(label="Change Dashboard")
             actions.append(dashboard)
             actions.append(reconnect)
             actions.append(stop)
+            actions.append(change)
             outer.append(actions)
 
             def open_dashboard(_button):
@@ -109,9 +200,13 @@ def main() -> int:
                 status.set_label("Stopped")
                 detail.set_label("No draft information is being sent.")
 
+            def change_dashboard(_button):
+                self.show_setup(window)
+
             dashboard.connect("clicked", open_dashboard)
             reconnect.connect("clicked", restart)
             stop.connect("clicked", stop_service)
+            change.connect("clicked", change_dashboard)
 
             labels = {
                 "starting": ("Connecting automatically…", "Waiting for the ESPN draft room."),
@@ -154,8 +249,18 @@ def main() -> int:
                 return GLib.SOURCE_CONTINUE
 
             refresh()
-            GLib.timeout_add_seconds(1, refresh)
+            self.refresh_source = GLib.timeout_add_seconds(1, refresh)
             window.set_child(outer)
+
+        def do_activate(self):
+            self.reload_units()
+            window = Gtk.ApplicationWindow(application=self)
+            window.set_title("Draftside Companion")
+            window.set_default_size(620, 400)
+            if dashboard_setup_required(_config_path()):
+                self.show_setup(window)
+            else:
+                self.show_status(window)
             window.present()
 
     return DraftsideApp().run(None)

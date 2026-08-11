@@ -5,11 +5,12 @@ Draftside Companion is the small Ubuntu app that connects the ESPN draft room on
 ## What using it feels like
 
 1. Install the `.deb` and open **Draftside Companion**.
-2. Draftside opens its private dashboard and the ESPN draft room in a dedicated Chrome profile.
-3. Sign into ESPN normally if Chrome asks.
-4. The status window turns **Ready** when picks are flowing.
+2. Enter the HTTPS address of your private Draftside dashboard.
+3. Draftside opens the dashboard and ESPN in a dedicated Chrome profile.
+4. Sign into ESPN in that Draftside Chrome window and open the draft room.
+5. The status window turns **Ready** when picks are flowing.
 
-There is no pairing code, configuration editor, API key, TOML file, or terminal workflow. On first launch the app creates a random device identity in Ubuntu Secret Service and enrolls itself with the configured private Draftside deployment. The dashboard shows the laptop and provides **Revoke** and **Re-enable** controls.
+There is no pairing code, API key, TOML editing, or terminal setup. The dashboard URL is entered on first launch and stored only in the user's owner-only local configuration. The app creates a random device identity in Ubuntu Secret Service and enrolls itself with that private Draftside deployment. The dashboard shows the laptop and provides **Revoke** and **Re-enable** controls.
 
 ## Install on Ubuntu 24.04 amd64
 
@@ -52,7 +53,7 @@ Runtime state is owner-only under `~/.local/state/draftside-companion`. The dedi
 - Revocation is immediate and does not affect ESPN credentials.
 - No shared Cloudflare service token, global ingest key, ESPN cookie, or league secret is packaged or committed.
 
-The endpoint URL is intentionally not treated as a secret. This is a personal fantasy-football tool, not a general-purpose identity platform.
+The package contains no deployment URL. The user supplies it at runtime, while access remains protected by Cloudflare Access and the per-device credential.
 
 ## Development
 
@@ -69,6 +70,3 @@ Build the Ubuntu package from the repository root:
 ```bash
 packaging/debian/test-package.sh
 ```
-
-Release maintainers can bake in their deployment's non-secret endpoint with
-`DRAFTSIDE_DASHBOARD_URL=https://draftside.example.com packaging/debian/build-deb.sh`.

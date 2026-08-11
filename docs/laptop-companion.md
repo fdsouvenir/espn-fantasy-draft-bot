@@ -6,10 +6,11 @@ The Laptop Companion runs beside the ESPN draft tab on the laptop being used to 
 
 1. Install the Ubuntu `.deb`.
 2. Open **Draftside Companion**.
-3. Sign into ESPN in the dedicated Chrome profile if needed.
-4. Wait for the native status window to show **Ready**.
+3. Enter the HTTPS address of the private Draftside dashboard.
+4. Sign into ESPN in the dedicated Chrome window that Draftside opens.
+5. Open the ESPN draft room in that window and wait for **Ready**.
 
-Everything else is automatic. There are no pairing codes, configuration prompts, API keys, or terminal windows. The private dashboard shows the registered laptop and can revoke or re-enable it.
+Everything else is automatic. There are no pairing codes, API keys, TOML editing, or terminal windows. The private dashboard shows the registered laptop and can revoke or re-enable it.
 
 ## Runtime design
 
@@ -34,7 +35,7 @@ The companion never enters ESPN credentials, reads password fields, exports cook
 
 ## Automatic enrollment
 
-The deployment URL is non-secret configuration. On first launch the app:
+On first launch the app asks the user for the deployment's HTTPS URL, stores it only in owner-only local configuration, and then:
 
 - generates a random device UUID and token;
 - stores both in Ubuntu Secret Service;
@@ -66,8 +67,7 @@ The Ubuntu 24.04 amd64 package includes:
 - XDG-scoped configuration, Chrome profile, health, and checkpoint paths;
 - reproducible Debian packaging and checksum validation.
 
-The release build injects the deployment's non-secret HTTPS endpoint through
-`DRAFTSIDE_DASHBOARD_URL`; users never edit that configuration themselves.
+The release package contains no deployment URL. The GTK onboarding screen asks for it before the background service starts.
 
 Advanced diagnostics remain available through the CLI and `journalctl`, but they are not part of normal setup.
 

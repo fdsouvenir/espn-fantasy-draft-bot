@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
 
+from . import __version__
 from .credentials import Credentials, DeviceCredentials
 
 
@@ -33,7 +34,7 @@ def signed_headers(
     return {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "Draftside-Companion/0.1",
+        "User-Agent": f"Draftside-Companion/{__version__}",
         "X-Draft-Timestamp": str(timestamp),
         "X-Draft-Nonce": nonce,
         "X-Draft-Signature": f"v1={signature}",
@@ -244,7 +245,7 @@ class DeviceWorkerClient(WorkerClient):
             "Accept": "application/json",
             "Authorization": f"Bearer {self.device.device_token}",
             "Content-Type": "application/json",
-            "User-Agent": "Draftside-Companion/0.2",
+            "User-Agent": f"Draftside-Companion/{__version__}",
             "X-Draftside-Device": self.device.device_id,
         }
 

@@ -22,7 +22,7 @@ Most draft tools start with a static rankings list and gradually become wrong as
 
 ## What it does
 
-- **Read-only browser observation.** A local companion attaches to an already-signed-in Chrome draft tab and observes the draft room's network events. It does not read passwords, submit ESPN commands, or automate selections.
+- **Read-only browser observation.** A local companion opens a dedicated Chrome profile where the user signs into ESPN, then observes the draft room's network events. It does not read passwords, submit ESPN commands, or automate selections.
 - **Resilient live ingestion.** Live selection events provide the fast path; the draft room's initialization state provides a complete board after reconnects.
 - **Strongly consistent state.** One SQLite-backed Cloudflare Durable Object owns each draft's picks, rosters, availability, health, and recommendations.
 - **Deterministic recommendations.** The same versioned catalog and draft state always produce the same ranking, including explainable roster need, tier, role, workload, injury, and value signals.

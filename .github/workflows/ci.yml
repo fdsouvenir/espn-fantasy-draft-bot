@@ -74,9 +74,11 @@ jobs:
             XDG_STATE_HOME="$test_home/.local/state" \
             XDG_DATA_HOME="$test_home/.local/share" \
             draftside-companion-setup
-          test "$(stat -c '%a' "$test_home/.config/draftside-companion/companion.toml")" = 600
+          test ! -e "$test_home/.config/draftside-companion/companion.toml"
+          test "$(stat -c '%a' "$test_home/.config/draftside-companion")" = 700
+          test "$(stat -c '%a' "$test_home/.local/share/draftside-companion/chrome-profile")" = 700
           sudo apt-get purge -y draftside-companion
-          test -f "$test_home/.config/draftside-companion/companion.toml"
+          test -d "$test_home/.config/draftside-companion"
           test ! -e /usr/bin/draftside-companion
       - uses: actions/upload-artifact@v4
         with:

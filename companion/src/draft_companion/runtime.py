@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .cdp import FrameSource, discover_chrome, launch_chrome, list_tabs
 from .config import Config
 from .credentials import load_credentials, load_or_create_device
@@ -135,7 +136,7 @@ class Companion:
                 self.config.runtime.request_timeout_seconds,
             )
             try:
-                bootstrap = worker.enroll(platform.node() or "Draft laptop", "0.2.0")
+                bootstrap = worker.enroll(platform.node() or "Draft laptop", __version__)
             except WorkerError as error:
                 state = "revoked" if str(error) == "device_revoked" else "reconnecting"
                 self._health(state, message=str(error), dashboardUrl=self.dashboard_url)

@@ -15,8 +15,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
+from . import __version__
 from .cdp import discover_chrome, list_tabs
-from .config import Config, load_config
+from .config import Config, SetupRequiredError, load_config
 from .credentials import load_credentials, load_or_create_device, store_credentials
 from .runtime import Companion, atomic_json, ensure_chrome, load_initializer, process_alive
 from .worker import DeviceWorkerClient, WorkerClient
@@ -60,7 +61,7 @@ def preflight(
         worker = DeviceWorkerClient(
             config.worker_base, device, config.runtime.request_timeout_seconds
         )
-        bootstrap = worker.enroll(platform.node() or "Draft laptop", "0.2.0")
+        bootstrap = worker.enroll(platform.node() or "Draft laptop", __version__)
         initializer = f"automatic:{bootstrap['draftKey']}"
         credential_status = "device_enrolled"
     else:
@@ -129,6 +130,8 @@ def configure(
     installed_initializer = config_path.parent / "draft-init.json"
     routing = "\n".join(
         [
+            "config_version = 1",
+            "dashboard_configured_by_user = true",
             f"worker_base = {json.dumps(worker_base)}",
             f"draft_key = {json.dumps(draft_key)}",
             f"init_file = {json.dumps(str(installed_initializer))}",
@@ -249,6 +252,26 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     try:
         config = load_config(args.config)
+    except SetupRequiredError as error:
+        if args.command in {"run", "status"}:
+            print(json.dumps({"ok": True, "state": "setup_required", "message": str(error)}))
+            return 0
+        print(json.dumps({"ok": False, "error": str(error)}))
+        return 2
+    except FileNotFoundError as error:
+        if args.command in {"run", "status"}:
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "state": "setup_required",
+                        "message": "enter the private dashboard URL in Draftside Companion",
+                    }
+                )
+            )
+            return 0
+        print(json.dumps({"ok": False, "error": str(error)}))
+        return 2
     except Exception as error:
         print(json.dumps({"ok": False, "error": str(error)}))
         return 2

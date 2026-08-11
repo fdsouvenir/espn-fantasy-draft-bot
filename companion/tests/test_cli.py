@@ -5,8 +5,8 @@ from draft_companion.cli import configure, main
 
 
 def test_cli_rejects_missing_config(capsys, tmp_path: Path):
-    assert main(["--config", str(tmp_path / "missing.toml"), "status"]) == 2
-    assert '"ok": false' in capsys.readouterr().out
+    assert main(["--config", str(tmp_path / "missing.toml"), "status"]) == 0
+    assert '"state": "setup_required"' in capsys.readouterr().out
 
 
 def test_dashboard_url_encodes_draft_key(capsys, tmp_path: Path):
@@ -14,7 +14,8 @@ def test_dashboard_url_encodes_draft_key(capsys, tmp_path: Path):
     initializer = tmp_path / "draft-init.json"
     initializer.write_text("{}")
     config.write_text(
-        f'''worker_base = "https://draftside.example.com"
+        f'''dashboard_configured_by_user = true
+worker_base = "https://draftside.example.com"
 draft_key = "season:league:Fred's team"
     init_file = "{initializer.as_posix()}"
 draft_url = "https://fantasy.espn.com/football/draft"
