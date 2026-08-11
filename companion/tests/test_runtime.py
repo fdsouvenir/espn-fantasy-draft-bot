@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import ClassVar
 
 from draft_companion.config import ChromeConfig, Config, RuntimeConfig
 from draft_companion.credentials import Credentials
-from draft_companion.runtime import Companion, atomic_json, ensure_chrome, process_alive
+from draft_companion.runtime import (
+    Companion,
+    append_evidence,
+    atomic_json,
+    ensure_chrome,
+    process_alive,
+)
 
 
 def config(tmp_path: Path) -> Config:
@@ -85,6 +92,20 @@ def test_atomic_json_never_leaves_world_readable_state(tmp_path: Path):
     atomic_json(path, {"ok": True})
     assert json.loads(path.read_text()) == {"ok": True}
     assert path.stat().st_mode & 0o077 == 0
+
+
+def test_state_writes_work_without_unix_fchmod(tmp_path: Path, monkeypatch):
+    monkeypatch.delattr(os, "fchmod")
+    state = tmp_path / "state.json"
+    evidence = tmp_path / "evidence.jsonl"
+
+    atomic_json(state, {"ok": True})
+    append_evidence(evidence, {"event": "connected"})
+
+    assert json.loads(state.read_text()) == {"ok": True}
+    assert [json.loads(line) for line in evidence.read_text().splitlines()] == [
+        {"event": "connected"}
+    ]
 
 
 def test_ensure_chrome_launches_dedicated_profile_and_waits(tmp_path: Path):

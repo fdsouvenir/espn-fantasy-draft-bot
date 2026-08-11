@@ -21,8 +21,9 @@ def atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
-        os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            if hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), 0o600)
             json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
             handle.write("\n")
             handle.flush()
@@ -41,7 +42,8 @@ def append_evidence(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
     try:
-        os.fchmod(fd, 0o600)
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
         os.write(fd, (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode())
         os.fsync(fd)
     finally:
