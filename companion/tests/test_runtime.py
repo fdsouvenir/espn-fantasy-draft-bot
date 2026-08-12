@@ -15,6 +15,7 @@ from draft_companion.runtime import (
     ensure_chrome,
     process_alive,
 )
+from draft_companion.worker import WorkerError
 
 
 def config(tmp_path: Path) -> Config:
@@ -31,7 +32,7 @@ def config(tmp_path: Path) -> Config:
         "draft:test",
         tmp_path / "init.json",
         "https://fantasy.espn.com/football/draft",
-        ChromeConfig(None, tmp_path / "profile", 9222, True, False),
+        ChromeConfig(None, tmp_path / "profile", 9222, True),
         RuntimeConfig(tmp_path / "state", 0.25, 15, 45, 5, "environment", "service"),
     )
 
@@ -136,6 +137,41 @@ def test_missing_draft_room_is_reported_as_waiting_for_user(tmp_path: Path, monk
         and fields.get("reason") == "draft_room_not_open"
         for state, fields in health_updates
     )
+
+
+def test_worker_retry_does_not_reload_draft_room_again(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("draft_companion.runtime.signal.signal", lambda *_args: None)
+    reloads = []
+    runtime = None
+
+    class RetryFrames:
+        def __init__(self, _port, _url, reload_page):
+            reloads.append(reload_page)
+
+        def read(self, _wait):
+            if len(reloads) == 1:
+                return [{"at": 1000, "data": "SELECTED 1 101 2"}]
+            runtime.stop()
+            return []
+
+        def close(self):
+            pass
+
+    class RetryWorker(FakeWorker):
+        def ingest(self, *_args):
+            raise WorkerError("worker_ingest_network_error")
+
+    runtime = Companion(
+        config(tmp_path),
+        frame_factory=RetryFrames,
+        worker_factory=RetryWorker,
+        credential_loader=lambda *_args: Credentials("h" * 32, "id", "secret"),
+        sleeper=lambda _seconds: None,
+    )
+
+    runtime.run()
+
+    assert reloads == [True, False]
 
 
 def test_atomic_json_never_leaves_world_readable_state(tmp_path: Path):

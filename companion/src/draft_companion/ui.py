@@ -224,7 +224,7 @@ def main() -> int:
                 ),
                 "waiting_for_draft_room": (
                     "Private dashboard connected",
-                    "Open your league's draft room in the separate Draftside Chrome window.",
+                    "Open your league's draft room in Draftside Chrome. It refreshes once to synchronize the board.",
                 ),
                 "chrome_unavailable": (
                     "Draftside Chrome is unavailable",
@@ -233,6 +233,10 @@ def main() -> int:
                 "dashboard_unreachable": (
                     "Private dashboard is unavailable",
                     "Check your network and dashboard address. Draftside will keep retrying.",
+                ),
+                "delivery_rejected": (
+                    "Dashboard rejected a draft update",
+                    "Draftside will not reload ESPN while it reports the validation problem.",
                 ),
                 "live": ("Ready", "Draft picks are flowing to your private dashboard."),
                 "reconnecting": (
@@ -291,7 +295,7 @@ def main() -> int:
                 )
                 draft_state = (
                     "Connected"
-                    if state in {"live", "complete"}
+                    if state in {"live", "complete", "delivery_rejected"}
                     else "Waiting for you"
                     if state == "waiting_for_draft_room"
                     else "Stopped"

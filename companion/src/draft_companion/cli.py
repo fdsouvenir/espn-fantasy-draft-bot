@@ -143,7 +143,6 @@ def configure(
             'start_url = "https://www.espn.com/fantasy/football/"',
             "debug_port = 9222",
             "launch = true",
-            "reload_on_attach = true",
             "",
             "[runtime]",
             f"state_directory = {json.dumps(str(state_directory))}",

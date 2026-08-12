@@ -199,7 +199,7 @@ class Companion:
                 source = self.frame_factory(
                     self.config.chrome.debug_port,
                     draft_url,
-                    self.config.chrome.reload_on_attach,
+                    reconnects == 0,
                 )
                 last_delivery = time.monotonic()
                 worker.heartbeat(len(self.picks), init["totalPickSlots"])
@@ -323,7 +323,19 @@ class Companion:
             except WorkerError as error:
                 reconnects += 1
                 reason = str(error)
-                state = "revoked" if reason == "device_revoked" else "dashboard_unreachable"
+                if reason == "device_revoked":
+                    state = "revoked"
+                elif reason.startswith(
+                    ("worker_ingest_invalid_", "worker_ingest_unsupported_")
+                ) or reason in {
+                    "worker_ingest_events_not_strictly_ordered",
+                    "worker_ingest_pick_conflict",
+                    "worker_ingest_event_id_conflict",
+                    "worker_ingest_draft_identity_conflict",
+                }:
+                    state = "delivery_rejected"
+                else:
+                    state = "dashboard_unreachable"
                 self._health(
                     state,
                     filledPicks=len(self.picks),

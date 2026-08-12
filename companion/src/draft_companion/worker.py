@@ -45,6 +45,22 @@ class WorkerError(RuntimeError):
     pass
 
 
+def _response_error_code(error: urllib.error.HTTPError) -> str | None:
+    try:
+        payload = json.loads(error.read(4096))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    code = payload.get("error") if isinstance(payload, Mapping) else None
+    if (
+        isinstance(code, str)
+        and 1 <= len(code) <= 80
+        and code.isascii()
+        and code.replace("_", "").isalnum()
+    ):
+        return code
+    return None
+
+
 class WorkerClient:
     def __init__(
         self,
@@ -109,7 +125,8 @@ class WorkerClient:
             with self.opener(request, timeout=self.timeout) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as error:
-            raise WorkerError(f"worker_{action}_http_{error.code}") from None
+            detail = _response_error_code(error) or f"http_{error.code}"
+            raise WorkerError(f"worker_{action}_{detail}") from None
         except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
             raise WorkerError(f"worker_{action}_network_error") from None
         if not isinstance(result, Mapping):
@@ -308,9 +325,10 @@ class DeviceWorkerClient(WorkerClient):
             with self.opener(request, timeout=self.timeout) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as error:
-            if error.code == 403:
+            detail = _response_error_code(error) or f"http_{error.code}"
+            if detail in {"device_revoked", "device_forbidden"}:
                 raise WorkerError("device_revoked") from None
-            raise WorkerError(f"worker_{action}_http_{error.code}") from None
+            raise WorkerError(f"worker_{action}_{detail}") from None
         except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
             raise WorkerError(f"worker_{action}_network_error") from None
         if not isinstance(result, Mapping):

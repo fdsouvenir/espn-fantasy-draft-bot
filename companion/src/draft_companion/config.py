@@ -22,7 +22,6 @@ class ChromeConfig:
     profile_directory: Path
     debug_port: int
     launch: bool
-    reload_on_attach: bool
     start_url: str = DEFAULT_ESPN_START_URL
 
 
@@ -146,7 +145,6 @@ def write_device_config(path: Path, worker_base: str) -> str:
             f"start_url = {json.dumps(DEFAULT_ESPN_START_URL)}",
             "debug_port = 9222",
             "launch = true",
-            "reload_on_attach = true",
             "",
             "[runtime]",
             f"state_directory = {json.dumps(str(state_directory))}",
@@ -246,7 +244,6 @@ def load_config(path: Path) -> Config:
             ),
             debug_port=debug_port,
             launch=bool(chrome.get("launch", True)),
-            reload_on_attach=bool(chrome.get("reload_on_attach", True)),
             start_url=start_url,
         ),
         runtime=RuntimeConfig(

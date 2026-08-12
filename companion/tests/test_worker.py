@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import json
 import uuid
 from datetime import UTC, datetime
+from urllib.error import HTTPError
 
 import pytest
 
@@ -172,3 +174,25 @@ def test_device_client_enrolls_and_ingests_without_shared_access_credentials():
     assert requests[1].full_url.endswith("/api/v1/drafts/draft%3Aauto/companion-ingest")
     assert "Cf-access-client-secret" not in requests[1].headers
     assert requests[1].headers["X-draft-signature"].startswith("v1=")
+
+
+def test_device_client_preserves_safe_worker_validation_code():
+    def opener(request, timeout):
+        raise HTTPError(
+            request.full_url,
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(b'{"error":"invalid_player_id","requestId":"private"}'),
+        )
+
+    client = DeviceWorkerClient(
+        "https://worker.example.com",
+        DeviceCredentials("00000000-0000-4000-8000-000000000001", "t" * 43),
+        5,
+        opener=opener,
+    )
+    client.draft_key = "draft:auto"
+
+    with pytest.raises(WorkerError, match="^worker_ingest_invalid_player_id$"):
+        client.heartbeat(0, 2)
