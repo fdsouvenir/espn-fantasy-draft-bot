@@ -133,8 +133,7 @@ def test_missing_draft_room_is_reported_as_waiting_for_user(tmp_path: Path, monk
     runtime.run()
 
     assert any(
-        state == "waiting_for_draft_room"
-        and fields.get("reason") == "draft_room_not_open"
+        state == "waiting_for_draft_room" and fields.get("reason") == "draft_room_not_open"
         for state, fields in health_updates
     )
 
