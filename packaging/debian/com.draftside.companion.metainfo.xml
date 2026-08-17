@@ -43,6 +43,11 @@
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.1" date="2026-08-17">
+      <description>
+        <p>Corrects upgrade versioning and makes the companion strictly on demand.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-08-17">
       <description>
         <p>Prompts for the dashboard URL, reports each connection stage, and runs only when opened.</p>

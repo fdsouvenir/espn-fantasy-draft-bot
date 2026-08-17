@@ -1,3 +1,11 @@
+draftside-companion (0.3.1-1) unstable; urgency=medium
+
+  * Correct the package version so existing 0.3.0 installations receive the update.
+  * Replace the login-enabled service with the on-demand runtime service.
+  * Retire the legacy service and stop its managed Chrome process on request.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Mon, 17 Aug 2026 14:12:07 -0500
+
 draftside-companion (0.3.0-1) unstable; urgency=medium
 
   * Ask for the private dashboard URL on first launch instead of embedding it.

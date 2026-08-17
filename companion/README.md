@@ -21,8 +21,8 @@ The status window separately reports the private dashboard, Draftside Chrome, an
 ## Install on Ubuntu 24.04 amd64
 
 ```bash
-sha256sum -c draftside-companion_0.3.0-1_amd64.deb.sha256
-sudo apt install ./draftside-companion_0.3.0-1_amd64.deb
+sha256sum -c draftside-companion_0.3.1-1_amd64.deb.sha256
+sudo apt install ./draftside-companion_0.3.1-1_amd64.deb
 ```
 
 Then open **Draftside Companion** from the application grid.
