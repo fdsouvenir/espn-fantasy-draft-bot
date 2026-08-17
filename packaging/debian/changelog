@@ -6,8 +6,9 @@ draftside-companion (0.3.0-1) unstable; urgency=medium
   * Open links with the desktop handler and start Chrome at ESPN's current fantasy home.
   * Show each connection stage and write redacted status transitions to the journal.
   * Refresh once to synchronize, never on retries, and report delivery validation failures.
+  * Start only when Draftside is opened and stop the managed Chrome window on request.
 
- -- Draftside Contributors <maintainers@draftside.dev>  Tue, 11 Aug 2026 15:30:00 -0500
+ -- Draftside Contributors <maintainers@draftside.dev>  Mon, 17 Aug 2026 13:56:57 -0500
 
 draftside-companion (0.2.0-1) unstable; urgency=medium
 
