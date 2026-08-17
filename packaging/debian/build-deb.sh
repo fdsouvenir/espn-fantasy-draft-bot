@@ -37,7 +37,7 @@ find "$package_root/usr/lib/python3/dist-packages" -type f -exec chmod 0644 {} +
 for command in draftside-companion draftside-companion-setup draftside-companion-service draftside-companion-desktop draftside-companion-ui; do
   install -m 0755 "$root/packaging/debian/$command" "$package_root/usr/bin/$command"
 done
-install -m 0644 "$root/packaging/debian/draftside-companion.service" "$package_root/usr/lib/systemd/user/draftside-companion.service"
+install -m 0644 "$root/packaging/debian/draftside-companion-runtime.service" "$package_root/usr/lib/systemd/user/draftside-companion-runtime.service"
 install -m 0644 "$root/packaging/debian/draftside-companion.desktop" "$package_root/usr/share/applications/draftside-companion.desktop"
 install -m 0644 "$root/packaging/debian/draftside-companion.svg" "$package_root/usr/share/icons/hicolor/scalable/apps/draftside-companion.svg"
 install -m 0644 "$root/packaging/debian/com.draftside.companion.metainfo.xml" "$package_root/usr/share/metainfo/com.draftside.companion.metainfo.xml"

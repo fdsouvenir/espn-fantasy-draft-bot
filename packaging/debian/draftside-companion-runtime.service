@@ -11,9 +11,7 @@ ExecStart=/usr/bin/draftside-companion run
 Restart=on-failure
 RestartSec=2
 TimeoutStopSec=15
+KillMode=control-group
 UMask=0077
 NoNewPrivileges=true
 Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=default.target

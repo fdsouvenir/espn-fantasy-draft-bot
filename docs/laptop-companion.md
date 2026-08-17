@@ -12,6 +12,8 @@ The Laptop Companion runs beside the ESPN draft tab on the laptop being used to 
 
 Everything else is automatic. There are no pairing codes, API keys, TOML editing, or terminal windows. The private dashboard shows the registered laptop and can revoke or re-enable it.
 
+The companion starts only when the user opens Draftside; it is never enabled at login. Closing the status window does not interrupt an active draft. **Stop Draftside** stops the service and its dedicated Chrome window.
+
 The GTK window shows the private dashboard, dedicated Chrome, and ESPN draft-room connections independently. Redacted state transitions are also written to the systemd user journal for support diagnostics.
 
 ## Runtime design

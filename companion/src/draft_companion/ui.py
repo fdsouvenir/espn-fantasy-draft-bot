@@ -7,6 +7,9 @@ from pathlib import Path
 
 from .config import dashboard_candidate, dashboard_setup_required, write_device_config
 
+SERVICE_UNIT = "draftside-companion-runtime.service"
+LEGACY_SERVICE_UNIT = "draftside-companion.service"
+
 
 def _config_path() -> Path:
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
@@ -46,7 +49,16 @@ def main() -> int:
         @staticmethod
         def service(action: str):
             subprocess.run(
-                ["systemctl", "--user", action, "draftside-companion.service"],
+                ["systemctl", "--user", action, SERVICE_UNIT],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+        @staticmethod
+        def retire_legacy_service():
+            subprocess.run(
+                ["systemctl", "--user", "disable", "--now", LEGACY_SERVICE_UNIT],
                 check=False,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -121,7 +133,6 @@ def main() -> int:
                     _health_path().unlink()
                 except FileNotFoundError:
                     pass
-                self.service("enable")
                 self.show_status(window)
 
             connect.connect("clicked", save)
@@ -130,7 +141,6 @@ def main() -> int:
 
         def show_status(self, window):
             self.clear_refresh()
-            self.service("enable")
             self.service("start")
 
             outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
@@ -179,7 +189,7 @@ def main() -> int:
             dashboard = Gtk.Button(label="Open Draft Dashboard")
             dashboard.add_css_class("suggested-action")
             reconnect = Gtk.Button(label="Reconnect")
-            stop = Gtk.Button(label="Stop")
+            stop = Gtk.Button(label="Stop Draftside")
             change = Gtk.Button(label="Change Dashboard")
             actions.append(dashboard)
             actions.append(reconnect)
@@ -193,20 +203,16 @@ def main() -> int:
                     Gio.AppInfo.launch_default_for_uri(configured, None)
 
             def restart(_button):
-                subprocess.run(
-                    ["systemctl", "--user", "restart", "draftside-companion.service"],
-                    check=False,
-                )
+                self.service("restart")
                 status.set_label("Restarting connections…")
                 detail.set_label("Draftside is reconnecting to your dashboard and ESPN.")
 
             def stop_service(_button):
-                subprocess.run(
-                    ["systemctl", "--user", "stop", "draftside-companion.service"],
-                    check=False,
-                )
+                self.service("stop")
                 status.set_label("Stopped")
-                detail.set_label("No draft information is being sent.")
+                detail.set_label(
+                    "Draftside and its Chrome window are stopped. No draft information is being sent."
+                )
 
             def change_dashboard(_button):
                 self.show_setup(window)
@@ -325,6 +331,7 @@ def main() -> int:
 
         def do_activate(self):
             self.reload_units()
+            self.retire_legacy_service()
             window = Gtk.ApplicationWindow(application=self)
             window.set_title("Draftside Companion")
             window.set_default_size(620, 400)

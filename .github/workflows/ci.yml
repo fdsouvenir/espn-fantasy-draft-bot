@@ -66,7 +66,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends "./$package"
           appstreamcli validate --no-net --strict /usr/share/metainfo/com.draftside.companion.metainfo.xml
           desktop-file-validate /usr/share/applications/draftside-companion.desktop
-          systemd-analyze verify /usr/lib/systemd/user/draftside-companion.service
+          systemd-analyze verify /usr/lib/systemd/user/draftside-companion-runtime.service
           draftside-companion --help
           test_home="$(mktemp -d)"
           HOME="$test_home" \

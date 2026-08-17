@@ -12,4 +12,4 @@ case "${1:-}" in
 esac
 
 draftside-companion-setup --quiet
-systemctl --user "$command" draftside-companion.service
+systemctl --user "$command" draftside-companion-runtime.service
