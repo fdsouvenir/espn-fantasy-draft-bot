@@ -384,6 +384,7 @@ class Companion:
             if stored.get("draftKey") == self.draft_key:
                 self.picks = {int(p["pickNumber"]): p for p in stored.get("picks", [])}
         reconnects = 0
+        reload_draft_room = pending_source is None
         self._health(
             "waiting_for_draft_room",
             filledPicks=len(self.picks),
@@ -402,15 +403,16 @@ class Companion:
                     source = self.frame_factory(
                         self.config.chrome.debug_port,
                         draft_url,
-                        False,
+                        reload_draft_room,
                         preferred_identity=_draft_identity(selected_draft),
                     )
                 else:
                     source = self.frame_factory(
                         self.config.chrome.debug_port,
                         draft_url,
-                        reconnects == 0,
+                        reload_draft_room,
                     )
+                reload_draft_room = False
                 last_delivery = time.monotonic()
                 worker.heartbeat(len(self.picks), init["totalPickSlots"])
                 self._health(
@@ -524,6 +526,7 @@ class Companion:
                     self.sleeper(self.config.runtime.reconnect_seconds)
             except URLError:
                 reconnects += 1
+                reload_draft_room = True
                 self._health(
                     "chrome_unavailable",
                     filledPicks=len(self.picks),
@@ -570,6 +573,7 @@ class Companion:
                     self.sleeper(self.config.runtime.reconnect_seconds)
             except (OSError, RuntimeError, DecodeError, ValueError):
                 reconnects += 1
+                reload_draft_room = True
                 self._health(
                     "reconnecting",
                     filledPicks=len(self.picks),
