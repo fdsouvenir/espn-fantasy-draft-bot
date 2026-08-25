@@ -6,9 +6,10 @@ Draftside Companion is the small Ubuntu app that connects the ESPN draft room on
 
 1. Install the `.deb` and open **Draftside Companion**.
 2. Enter the HTTPS address of your private Draftside dashboard.
-3. Draftside opens the dashboard with your desktop's default link handler and opens ESPN Fantasy Football in a dedicated Chrome profile.
+3. Draftside opens ESPN Fantasy Football in a dedicated Chrome profile.
 4. Sign into ESPN in that Draftside Chrome window and open the draft room.
-5. The status window turns **Ready** when picks are flowing.
+5. Draftside identifies that room and selects its initialized board. If more than one board could match, it asks you to choose.
+6. The status window turns **Ready** and enables **Open Draft Board** when picks are flowing.
 
 There is no pairing code, API key, TOML editing, or terminal setup. The dashboard URL is entered on first launch and stored only in the user's owner-only local configuration. The app creates a random device identity in Ubuntu Secret Service and enrolls itself with that private Draftside deployment. The dashboard shows the laptop and provides **Revoke** and **Re-enable** controls.
 
@@ -16,7 +17,7 @@ Draftside runs only after you open the app. It never starts at login. Closing th
 
 On its first attachment, Draftside refreshes the draft room once so ESPN sends the complete board. Delivery retries never reload the page.
 
-The status window separately reports the private dashboard, Draftside Chrome, and ESPN draft-room connections. **Private dashboard connected** means enrollment succeeded; **Ready** means the draft-room observer is also attached and can deliver picks.
+The status window separately reports the private dashboard, Draftside Chrome, and ESPN draft-room connections. **Open Draft Board** stays disabled until an ESPN room has been matched; **Change Draft** reruns that detection. **Ready** means the room observer is attached and can deliver picks.
 
 ## Install on Ubuntu 24.04 amd64
 
@@ -53,7 +54,7 @@ The system journal records redacted status transitions without dashboard URLs, d
 ## Security model
 
 - The dashboard and device controls remain behind Cloudflare Access.
-- The narrow companion registration/ingestion paths accept per-device credentials.
+- The narrow companion registration, room-resolution, board-selection, and ingestion paths accept per-device credentials.
 - Each installation generates its own token; only its SHA-256 verifier is stored server-side.
 - Event bodies are HMAC-signed with timestamps and unique nonces.
 - Revocation is immediate and does not affect ESPN credentials.

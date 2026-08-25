@@ -8,7 +8,8 @@ The Laptop Companion runs beside the ESPN draft tab on the laptop being used to 
 2. Open **Draftside Companion**.
 3. Enter the HTTPS address of the private Draftside dashboard.
 4. Sign into ESPN in the dedicated Chrome window that Draftside opens.
-5. Open the ESPN draft room in that window and wait for **Ready**.
+5. Open the ESPN draft room in that window. Draftside selects the matching initialized board and asks only if the choice is ambiguous.
+6. Wait for **Ready**, then use **Open Draft Board**.
 
 Everything else is automatic. There are no pairing codes, API keys, TOML editing, or terminal windows. The private dashboard shows the registered laptop and can revoke or re-enable it.
 
@@ -43,13 +44,14 @@ On first launch the app asks the user for the deployment's HTTPS URL, stores it 
 
 - generates a random device UUID and token;
 - stores both in Ubuntu Secret Service;
-- registers the token verifier with the active private Draftside deployment;
-- downloads only the active draft's minimal routing metadata;
+- registers the token verifier with the private Draftside deployment;
+- receives a bounded list of initialized boards and matches the room currently open in Chrome;
+- explicitly binds that device to the selected board before ingestion;
 - starts observation and delivery.
 
 The backend stores only a SHA-256 verifier for the device token. Every batch is HMAC-signed with the device token, timestamped, and nonce-protected. Revocation immediately blocks registration and ingestion for that device until the authenticated dashboard explicitly re-enables it.
 
-The dashboard remains behind Cloudflare Access. Only the bounded companion registration and ingestion endpoints are reachable by the app.
+The dashboard remains behind Cloudflare Access. The app reaches only the bounded companion registration, room-resolution, board-selection, and ingestion endpoints.
 
 ## Reliability
 

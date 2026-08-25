@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from .config import dashboard_candidate, dashboard_setup_required, write_device_config
 
@@ -22,6 +24,42 @@ def _config_path() -> Path:
 def _health_path() -> Path:
     state_home = Path(os.environ.get("XDG_STATE_HOME", "~/.local/state")).expanduser()
     return state_home / "draftside-companion/health.json"
+
+
+def _selection_path() -> Path:
+    return _health_path().with_name("draft-selection.json")
+
+
+def _write_draft_selection(draft_key: str) -> None:
+    if not draft_key or len(draft_key) > 240:
+        raise ValueError("invalid draft selection")
+    path = _selection_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            if hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), 0o600)
+            json.dump({"draftKey": draft_key}, handle, sort_keys=True, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _board_url(value: object) -> str | None:
+    if not isinstance(value, str) or not value.startswith("https://"):
+        return None
+    parsed = urlparse(value)
+    draft = parse_qs(parsed.query).get("draft", [])
+    return value if len(draft) == 1 and bool(draft[0]) else None
 
 
 def _read_health() -> dict[str, object]:
@@ -162,6 +200,12 @@ def main() -> int:
             subtitle.set_xalign(0)
             outer.append(subtitle)
 
+            selected_board = Gtk.Label(label="No draft board selected yet")
+            selected_board.add_css_class("dim-label")
+            selected_board.set_wrap(True)
+            selected_board.set_xalign(0)
+            outer.append(selected_board)
+
             card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
             card.add_css_class("card")
             card.set_margin_top(8)
@@ -186,20 +230,43 @@ def main() -> int:
             outer.append(card)
 
             actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            dashboard = Gtk.Button(label="Open Draft Dashboard")
+            dashboard = Gtk.Button(label="Open Draft Board")
             dashboard.add_css_class("suggested-action")
+            dashboard.set_sensitive(False)
+            change_draft = Gtk.Button(label="Change Draft")
+            change_draft.set_visible(False)
             reconnect = Gtk.Button(label="Reconnect")
             stop = Gtk.Button(label="Stop Draftside")
             change = Gtk.Button(label="Change Dashboard")
             actions.append(dashboard)
+            actions.append(change_draft)
             actions.append(reconnect)
-            actions.append(stop)
-            actions.append(change)
             outer.append(actions)
 
+            secondary_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            secondary_actions.append(stop)
+            secondary_actions.append(change)
+            outer.append(secondary_actions)
+
+            picker = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            picker_title = Gtk.Label(label="Which draft room are you using?")
+            picker_title.add_css_class("title-2")
+            picker_title.set_xalign(0)
+            picker.append(picker_title)
+            picker_help = Gtk.Label(
+                label="Draftside found more than one possible board. Choose one to continue."
+            )
+            picker_help.set_wrap(True)
+            picker_help.set_xalign(0)
+            picker.append(picker_help)
+            picker_buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            picker.append(picker_buttons)
+            picker.set_visible(False)
+            outer.append(picker)
+
             def open_dashboard(_button):
-                configured = _read_health().get("dashboardUrl")
-                if isinstance(configured, str) and configured.startswith("https://"):
+                configured = _board_url(_read_health().get("dashboardUrl"))
+                if configured is not None:
                     Gio.AppInfo.launch_default_for_uri(configured, None)
 
             def restart(_button):
@@ -214,10 +281,24 @@ def main() -> int:
                     "Draftside and its Chrome window are stopped. No draft information is being sent."
                 )
 
+            def redetect_draft(_button):
+                try:
+                    _selection_path().unlink()
+                except FileNotFoundError:
+                    pass
+                self.service("restart")
+                dashboard.set_sensitive(False)
+                change_draft.set_visible(False)
+                picker.set_visible(False)
+                selected_board.set_label("Looking for the draft room you have open…")
+                status.set_label("Finding your draft…")
+                detail.set_label("Keep the ESPN draft room you want open in Draftside Chrome.")
+
             def change_dashboard(_button):
                 self.show_setup(window)
 
             dashboard.connect("clicked", open_dashboard)
+            change_draft.connect("clicked", redetect_draft)
             reconnect.connect("clicked", restart)
             stop.connect("clicked", stop_service)
             change.connect("clicked", change_dashboard)
@@ -229,8 +310,24 @@ def main() -> int:
                     "Confirming this laptop with your Draftside deployment.",
                 ),
                 "waiting_for_draft_room": (
-                    "Private dashboard connected",
-                    "Open your league's draft room in Draftside Chrome. It refreshes once to synchronize the board.",
+                    "Open your ESPN draft room",
+                    "The draft board button will become available after Draftside identifies that room.",
+                ),
+                "draft_selection_required": (
+                    "Choose your draft",
+                    "More than one initialized board could match the open ESPN draft room.",
+                ),
+                "draft_not_initialized": (
+                    "This draft has no board yet",
+                    "Initialize this ESPN draft on the private dashboard, then click Reconnect.",
+                ),
+                "draft_room_unidentified": (
+                    "Still identifying this draft room",
+                    "Leave the ESPN draft room open. Draftside will keep checking it safely.",
+                ),
+                "no_initialized_draft": (
+                    "No draft boards are initialized",
+                    "Initialize a draft on the private dashboard, then click Reconnect.",
                 ),
                 "chrome_unavailable": (
                     "Draftside Chrome is unavailable",
@@ -253,20 +350,78 @@ def main() -> int:
                 "stopped": ("Stopped", "No draft information is being sent."),
                 "revoked": ("Access revoked", "Re-enable this laptop from the private dashboard."),
             }
-            dashboard_opened = False
+            rendered_options = None
+            selection_pending = False
+
+            def render_options(options):
+                nonlocal rendered_options
+                safe_options = []
+                if isinstance(options, list):
+                    for option in options:
+                        if not isinstance(option, dict):
+                            continue
+                        key, name = option.get("draftKey"), option.get("displayName")
+                        season, league = option.get("season"), option.get("leagueId")
+                        if (
+                            isinstance(key, str)
+                            and isinstance(name, str)
+                            and isinstance(season, int)
+                            and isinstance(league, str)
+                        ):
+                            safe_options.append((key, name, season, league))
+                signature = tuple(safe_options)
+                if signature == rendered_options:
+                    return
+                rendered_options = signature
+                child = picker_buttons.get_first_child()
+                while child is not None:
+                    following = child.get_next_sibling()
+                    picker_buttons.remove(child)
+                    child = following
+                for key, name, season, league in safe_options:
+                    choice = Gtk.Button(label=f"{name} · {season} · League {league}")
+
+                    def select(_button, draft_key=key):
+                        nonlocal selection_pending
+                        try:
+                            _write_draft_selection(draft_key)
+                        except (OSError, ValueError) as problem:
+                            detail.set_label(str(problem))
+                            return
+                        selection_pending = True
+                        picker.set_visible(False)
+                        status.set_label("Switching draft…")
+                        detail.set_label("Draftside is connecting to the selected ESPN room.")
+
+                    choice.connect("clicked", select)
+                    picker_buttons.append(choice)
 
             def refresh():
-                nonlocal dashboard_opened
+                nonlocal selection_pending
                 health = _read_health()
                 state = str(health.get("state", "starting"))
-                dashboard_url = health.get("dashboardUrl")
-                if (
-                    not dashboard_opened
-                    and isinstance(dashboard_url, str)
-                    and dashboard_url.startswith("https://")
-                ):
-                    Gio.AppInfo.launch_default_for_uri(dashboard_url, None)
-                    dashboard_opened = True
+                if state != "draft_selection_required":
+                    selection_pending = False
+                dashboard_url = _board_url(health.get("dashboardUrl"))
+                dashboard.set_sensitive(
+                    dashboard_url is not None
+                    and state in {"live", "complete", "delivery_rejected"}
+                )
+                selected = health.get("selectedDraft")
+                if isinstance(selected, dict) and isinstance(selected.get("displayName"), str):
+                    season = selected.get("season")
+                    selected_board.set_label(
+                        f"Current board: {selected['displayName']}"
+                        + (f" · {season}" if isinstance(season, int) else "")
+                    )
+                    change_draft.set_visible(True)
+                else:
+                    selected_board.set_label("No draft board selected yet")
+                    change_draft.set_visible(False)
+                render_options(health.get("draftOptions"))
+                picker.set_visible(
+                    state == "draft_selection_required" and not selection_pending
+                )
                 headline, copy = labels.get(
                     state,
                     (
@@ -274,6 +429,9 @@ def main() -> int:
                         str(health.get("message", "Open Draftside again to retry.")),
                     ),
                 )
+                if selection_pending and state == "draft_selection_required":
+                    headline = "Switching draft…"
+                    copy = "Draftside is connecting to the selected ESPN room."
                 status.set_label(headline)
                 filled, total = health.get("filledPicks"), health.get("totalPicks")
                 if (
@@ -327,14 +485,17 @@ def main() -> int:
 
             refresh()
             self.refresh_source = GLib.timeout_add_seconds(1, refresh)
-            window.set_child(outer)
+            scroll = Gtk.ScrolledWindow()
+            scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            scroll.set_child(outer)
+            window.set_child(scroll)
 
         def do_activate(self):
             self.reload_units()
             self.retire_legacy_service()
             window = Gtk.ApplicationWindow(application=self)
             window.set_title("Draftside Companion")
-            window.set_default_size(620, 400)
+            window.set_default_size(680, 560)
             if dashboard_setup_required(_config_path()):
                 self.show_setup(window)
             else:
