@@ -248,6 +248,14 @@ def main() -> int:
             secondary_actions.append(change)
             outer.append(secondary_actions)
 
+            close_note = Gtk.Label(
+                label="Closing this window stops Draftside and its Chrome window."
+            )
+            close_note.add_css_class("dim-label")
+            close_note.set_wrap(True)
+            close_note.set_xalign(0)
+            outer.append(close_note)
+
             picker = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
             picker_title = Gtk.Label(label="Which draft room are you using?")
             picker_title.add_css_class("title-2")
@@ -493,6 +501,13 @@ def main() -> int:
             window = Gtk.ApplicationWindow(application=self)
             window.set_title("Draftside Companion")
             window.set_default_size(680, 560)
+
+            def close_window(_window):
+                self.clear_refresh()
+                self.service("stop")
+                return False
+
+            window.connect("close-request", close_window)
             if dashboard_setup_required(_config_path()):
                 self.show_setup(window)
             else:
