@@ -140,8 +140,31 @@ def test_device_client_enrolls_and_ingests_without_shared_access_credentials():
     def opener(request, timeout):
         requests.append(request)
         if request.full_url.endswith("/register"):
+            return Response({"device": {"deviceId": device.device_id}})
+        if request.full_url.endswith("/resolve"):
             return Response(
                 {
+                    "drafts": [
+                        {
+                            "draftKey": "draft:auto",
+                            "displayName": "Test League",
+                            "season": 2026,
+                            "leagueId": "1",
+                            "draftEpoch": 1786494600000,
+                        }
+                    ]
+                }
+            )
+        if request.full_url.endswith("/select"):
+            return Response(
+                {
+                    "draft": {
+                        "draftKey": "draft:auto",
+                        "displayName": "Test League",
+                        "season": 2026,
+                        "leagueId": "1",
+                        "draftEpoch": 1786494600000,
+                    },
                     "bootstrap": {
                         "draftKey": "draft:auto",
                         "expectedTeams": 2,
@@ -166,14 +189,20 @@ def test_device_client_enrolls_and_ingests_without_shared_access_credentials():
     client = DeviceWorkerClient(
         "https://worker.example.com", device, 5, opener=opener, clock=lambda: 123
     )
-    assert client.enroll("Fred's laptop", "0.2.0")["draftKey"] == "draft:auto"
+    assert client.enroll("Fred's laptop", "0.2.0") is None
+    assert client.resolve_drafts([{"season": 2026, "leagueId": "1"}])[0][
+        "draftKey"
+    ] == "draft:auto"
+    assert client.select_draft("draft:auto")[0]["draftKey"] == "draft:auto"
     client.heartbeat(0, 2)
 
     assert requests[0].headers["Authorization"] == f"Bearer {device.device_token}"
     assert requests[0].headers["X-draftside-device"] == device.device_id
-    assert requests[1].full_url.endswith("/api/v1/drafts/draft%3Aauto/companion-ingest")
-    assert "Cf-access-client-secret" not in requests[1].headers
-    assert requests[1].headers["X-draft-signature"].startswith("v1=")
+    assert requests[1].full_url.endswith("/api/v1/companion/resolve")
+    assert requests[2].full_url.endswith("/api/v1/companion/select")
+    assert requests[3].full_url.endswith("/api/v1/drafts/draft%3Aauto/companion-ingest")
+    assert "Cf-access-client-secret" not in requests[3].headers
+    assert requests[3].headers["X-draft-signature"].startswith("v1=")
 
 
 def test_device_client_preserves_safe_worker_validation_code():

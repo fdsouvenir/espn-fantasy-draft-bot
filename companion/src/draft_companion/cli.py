@@ -61,8 +61,8 @@ def preflight(
         worker = DeviceWorkerClient(
             config.worker_base, device, config.runtime.request_timeout_seconds
         )
-        bootstrap = worker.enroll(platform.node() or "Draft laptop", __version__)
-        initializer = f"automatic:{bootstrap['draftKey']}"
+        worker.enroll(platform.node() or "Draft laptop", __version__)
+        initializer = "automatic"
         credential_status = "device_enrolled"
     else:
         if config.init_file is None or config.draft_key is None:
@@ -286,16 +286,20 @@ def main(argv: list[str] | None = None) -> int:
             except (FileNotFoundError, ValueError):
                 health = {}
             enrolled_url = health.get("dashboardUrl") if isinstance(health, dict) else None
-            url = (
+            url: str | None = (
                 enrolled_url
-                if isinstance(enrolled_url, str) and enrolled_url.startswith("https://")
+                if isinstance(enrolled_url, str)
+                and enrolled_url.startswith("https://")
+                and "draft=" in enrolled_url
                 else (
                     f"{config.worker_base}/?{urlencode({'draft': config.draft_key})}"
                     if config.draft_key
-                    else config.worker_base
+                    else None
                 )
             )
-            if args.open_browser and not webbrowser.open(url):
+            if args.open_browser and url is None:
+                raise RuntimeError("open an ESPN draft room before opening its board")
+            if args.open_browser and url is not None and not webbrowser.open(url):
                 raise RuntimeError("dashboard could not be opened")
             result = {"ok": True, "opened": args.open_browser, "url": url}
         elif args.command == "run":

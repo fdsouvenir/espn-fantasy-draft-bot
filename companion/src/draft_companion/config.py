@@ -58,6 +58,10 @@ class Config:
         return self.runtime.state_directory / "health.json"
 
     @property
+    def selection_file(self) -> Path:
+        return self.runtime.state_directory / "draft-selection.json"
+
+    @property
     def pid_file(self) -> Path:
         return self.runtime.state_directory / "companion.pid"
 

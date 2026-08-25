@@ -61,6 +61,8 @@ def test_cdp_attaches_to_matching_tab_and_never_subscribes_to_outbound_frames():
         connector=lambda endpoint, **_kwargs: seen_endpoints.append(endpoint) or socket,
     )
     assert seen_endpoints == ["ws://localhost/devtools/page/opaque"]
+    assert source.room_identity is not None
+    assert source.room_identity.league_id == "1"
     source._record(
         {
             "method": "Network.webSocketCreated",

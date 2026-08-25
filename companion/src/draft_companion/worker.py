@@ -266,10 +266,10 @@ class DeviceWorkerClient(WorkerClient):
             "X-Draftside-Device": self.device.device_id,
         }
 
-    def enroll(self, name: str, version: str) -> Mapping[str, Any]:
-        body = canonical_json({"name": name[:80], "version": version[:32]})
+    def _device_post(self, pathname: str, payload: Mapping[str, Any], action: str) -> Mapping[str, Any]:
+        body = canonical_json(payload)
         request = urllib.request.Request(
-            self.base + "/api/v1/companion/register",
+            self.base + pathname,
             data=body,
             headers=self._device_headers(),
             method="POST",
@@ -278,26 +278,71 @@ class DeviceWorkerClient(WorkerClient):
             with self.opener(request, timeout=self.timeout) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as error:
-            if error.code == 403:
+            detail = _response_error_code(error) or f"http_{error.code}"
+            if detail in {"device_revoked", "device_forbidden"}:
                 raise WorkerError("device_revoked") from None
-            raise WorkerError(f"device_enrollment_http_{error.code}") from None
+            raise WorkerError(f"device_{action}_{detail}") from None
         except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError):
-            raise WorkerError("device_enrollment_network_error") from None
-        bootstrap = result.get("bootstrap") if isinstance(result, Mapping) else None
+            raise WorkerError(f"device_{action}_network_error") from None
+        if not isinstance(result, Mapping):
+            raise WorkerError(f"device_{action}_invalid_ack")
+        return result
+
+    @staticmethod
+    def _validate_bootstrap(value: object) -> Mapping[str, Any]:
         required = ("draftKey", "expectedTeams", "totalPickSlots", "draftSlotTeamIds", "draftUrl")
-        if not isinstance(bootstrap, Mapping) or any(key not in bootstrap for key in required):
-            raise WorkerError("device_enrollment_invalid_ack")
+        if not isinstance(value, Mapping) or any(key not in value for key in required):
+            raise WorkerError("device_selection_invalid_ack")
         if (
-            not isinstance(bootstrap["draftKey"], str)
-            or not isinstance(bootstrap["expectedTeams"], int)
-            or not isinstance(bootstrap["totalPickSlots"], int)
-            or not isinstance(bootstrap["draftSlotTeamIds"], list)
-            or len(bootstrap["draftSlotTeamIds"]) != bootstrap["totalPickSlots"]
-            or not isinstance(bootstrap["draftUrl"], str)
+            not isinstance(value["draftKey"], str)
+            or not isinstance(value["expectedTeams"], int)
+            or not isinstance(value["totalPickSlots"], int)
+            or not isinstance(value["draftSlotTeamIds"], list)
+            or len(value["draftSlotTeamIds"]) != value["totalPickSlots"]
+            or not isinstance(value["draftUrl"], str)
         ):
+            raise WorkerError("device_selection_invalid_ack")
+        return value
+
+    @staticmethod
+    def _validate_draft(value: object, action: str) -> Mapping[str, Any]:
+        if (
+            not isinstance(value, Mapping)
+            or not isinstance(value.get("draftKey"), str)
+            or not isinstance(value.get("displayName"), str)
+            or not isinstance(value.get("season"), int)
+            or not isinstance(value.get("leagueId"), str)
+            or not isinstance(value.get("draftEpoch"), int)
+        ):
+            raise WorkerError(f"device_{action}_invalid_ack")
+        return value
+
+    def enroll(self, name: str, version: str) -> None:
+        result = self._device_post(
+            "/api/v1/companion/register",
+            {"name": name[:80], "version": version[:32]},
+            "enrollment",
+        )
+        if not isinstance(result.get("device"), Mapping):
             raise WorkerError("device_enrollment_invalid_ack")
-        self.draft_key = bootstrap["draftKey"]
-        return bootstrap
+
+    def resolve_drafts(self, rooms: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+        result = self._device_post("/api/v1/companion/resolve", {"rooms": rooms}, "resolution")
+        drafts = result.get("drafts")
+        if not isinstance(drafts, list) or len(drafts) > 100:
+            raise WorkerError("device_resolution_invalid_ack")
+        return [self._validate_draft(draft, "resolution") for draft in drafts]
+
+    def select_draft(self, draft_key: str) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+        result = self._device_post(
+            "/api/v1/companion/select", {"draftKey": draft_key}, "selection"
+        )
+        bootstrap = self._validate_bootstrap(result.get("bootstrap"))
+        draft = self._validate_draft(result.get("draft"), "selection")
+        if bootstrap["draftKey"] != draft_key:
+            raise WorkerError("device_selection_invalid_ack")
+        self.draft_key = draft_key
+        return bootstrap, draft
 
     def health(self) -> Mapping[str, Any]:
         raise WorkerError("device_health_requires_enrollment")

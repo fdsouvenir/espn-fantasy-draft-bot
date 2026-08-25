@@ -11,9 +11,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
+from urllib.parse import urlencode
 
 from . import __version__
-from .cdp import DraftRoomNotFoundError, FrameSource, discover_chrome, launch_chrome, list_tabs
+from .cdp import (
+    DraftRoomAmbiguousError,
+    DraftRoomIdentity,
+    DraftRoomNotFoundError,
+    FrameSource,
+    discover_chrome,
+    launch_chrome,
+    list_tabs,
+)
 from .config import Config
 from .credentials import load_credentials, load_or_create_device
 from .frames import DecodeError, decode_init_picks, selected_frame
@@ -78,6 +87,54 @@ def load_initializer(path: Path, draft_key: str) -> dict[str, Any]:
     return payload
 
 
+def _draft_identity(draft: Mapping[str, Any]) -> DraftRoomIdentity:
+    return DraftRoomIdentity(
+        season=int(draft["season"]),
+        league_id=str(draft["leagueId"]),
+        draft_epoch=int(draft["draftEpoch"]),
+    )
+
+
+def _draft_options(drafts: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "draftKey": str(draft["draftKey"]),
+            "displayName": str(draft["displayName"]),
+            "season": int(draft["season"]),
+            "leagueId": str(draft["leagueId"]),
+            "draftEpoch": int(draft["draftEpoch"]),
+        }
+        for draft in drafts
+    ]
+
+
+def _selection_key(path: Path) -> str | None:
+    try:
+        if path.stat().st_size > 1024:
+            raise ValueError("draft selection is too large")
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError, json.JSONDecodeError):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        return None
+    draft_key = value.get("draftKey") if isinstance(value, dict) else None
+    return draft_key if isinstance(draft_key, str) and 1 <= len(draft_key) <= 240 else None
+
+
+def _room_payload(identities: list[DraftRoomIdentity | None]) -> list[dict[str, Any]]:
+    rooms: dict[tuple[int | None, str], dict[str, Any]] = {}
+    for identity in identities:
+        if identity is None or identity.league_id is None:
+            continue
+        key = (identity.season, identity.league_id)
+        rooms[key] = {"season": identity.season, "leagueId": identity.league_id}
+    return list(rooms.values())[:8]
+
+
 class Companion:
     def __init__(
         self,
@@ -111,6 +168,8 @@ class Companion:
             "workerRevision",
             "dashboardUrl",
             "message",
+            "draftOptions",
+            "selectedDraft",
         }
         value = {"schemaVersion": 1, "state": state, "updatedAt": utc_now(), "pid": os.getpid()}
         value.update({k: v for k, v in fields.items() if k in allowed})
@@ -138,7 +197,144 @@ class Companion:
     def stop(self, *_args: Any) -> None:
         self.stopping = True
 
+    def _connect_device_draft(
+        self, worker: DeviceWorkerClient
+    ) -> tuple[Mapping[str, Any], Any, Mapping[str, Any], list[dict[str, Any]]] | None:
+        worker.enroll(platform.node() or "Draft laptop", __version__)
+        reload_page = True
+        while not self.stopping:
+            preferred = None
+            bootstrap = None
+            selection_key = _selection_key(self.config.selection_file)
+            if selection_key is not None:
+                try:
+                    bootstrap, preferred = worker.select_draft(selection_key)
+                except WorkerError as error:
+                    if str(error) != "device_selection_draft_not_found":
+                        raise
+                    try:
+                        self.config.selection_file.unlink()
+                    except FileNotFoundError:
+                        pass
+            preferred_identity = _draft_identity(preferred) if preferred is not None else None
+            source = None
+            try:
+                source = self.frame_factory(
+                    self.config.chrome.debug_port,
+                    self.config.draft_url,
+                    reload_page,
+                    preferred_identity=preferred_identity,
+                )
+                reload_page = False
+                if preferred is not None and bootstrap is not None:
+                    try:
+                        self.config.selection_file.unlink()
+                    except FileNotFoundError:
+                        pass
+                    connected_source, source = source, None
+                    return bootstrap, connected_source, preferred, [
+                        _draft_options([preferred])[0]
+                    ]
+                room_identity = getattr(source, "room_identity", None)
+                if room_identity is None and hasattr(source, "wait_for_identity"):
+                    room_identity = source.wait_for_identity(1.0)
+                rooms = _room_payload([room_identity])
+                if not rooms:
+                    self._health(
+                        "draft_room_unidentified",
+                        reason="draft_room_unidentified",
+                        dashboardUrl=self.dashboard_url,
+                    )
+                    source.close()
+                    source = None
+                    self.sleeper(self.config.runtime.reconnect_seconds)
+                    continue
+                drafts = worker.resolve_drafts(rooms)
+                options = _draft_options(drafts)
+                if len(drafts) != 1:
+                    state = "draft_selection_required" if drafts else "draft_not_initialized"
+                    self._health(
+                        state,
+                        reason=state,
+                        dashboardUrl=self.dashboard_url,
+                        draftOptions=options,
+                    )
+                    source.close()
+                    source = None
+                    self.sleeper(self.config.runtime.reconnect_seconds)
+                    continue
+                bootstrap, selected = worker.select_draft(str(drafts[0]["draftKey"]))
+                try:
+                    self.config.selection_file.unlink()
+                except FileNotFoundError:
+                    pass
+                connected_source, source = source, None
+                return bootstrap, connected_source, selected, options
+            except DraftRoomAmbiguousError as error:
+                rooms = _room_payload(error.identities)
+                drafts = worker.resolve_drafts(rooms) if rooms else []
+                if len(drafts) == 1:
+                    selected = drafts[0]
+                    source = self.frame_factory(
+                        self.config.chrome.debug_port,
+                        self.config.draft_url,
+                        reload_page,
+                        preferred_identity=_draft_identity(selected),
+                    )
+                    reload_page = False
+                    bootstrap, selected = worker.select_draft(str(selected["draftKey"]))
+                    connected_source, source = source, None
+                    return bootstrap, connected_source, selected, _draft_options(drafts)
+                state = (
+                    "draft_room_unidentified"
+                    if not rooms
+                    else "draft_selection_required"
+                    if drafts
+                    else "draft_not_initialized"
+                )
+                self._health(
+                    state,
+                    reason=(
+                        "multiple_draft_rooms_open"
+                        if state == "draft_selection_required"
+                        else state
+                    ),
+                    dashboardUrl=self.dashboard_url,
+                    draftOptions=_draft_options(drafts),
+                )
+                self.sleeper(self.config.runtime.reconnect_seconds)
+            except DraftRoomNotFoundError:
+                self._health(
+                    "waiting_for_draft_room",
+                    reason="draft_room_not_open",
+                    dashboardUrl=self.dashboard_url,
+                )
+                self.sleeper(self.config.runtime.reconnect_seconds)
+            except URLError:
+                self._health(
+                    "chrome_unavailable",
+                    reason="chrome_debugging_unavailable",
+                    dashboardUrl=self.dashboard_url,
+                )
+                try:
+                    ensure_chrome(self.config, sleeper=self.sleeper)
+                except (OSError, RuntimeError, ValueError):
+                    pass
+                self.sleeper(self.config.runtime.reconnect_seconds)
+            finally:
+                if source is not None:
+                    try:
+                        source.close()
+                    except OSError:
+                        pass
+        return None
+
     def run(self) -> None:
+        signal.signal(signal.SIGTERM, self.stop)
+        signal.signal(signal.SIGINT, self.stop)
+        pending_source = None
+        selected_draft = None
+        draft_options: list[dict[str, Any]] = []
         if self.config.runtime.credential_source == "device":
             device = self.device_loader(self.config.runtime.keyring_service)
             worker = DeviceWorkerClient(
@@ -148,12 +344,16 @@ class Companion:
             )
             self._health("connecting_dashboard", dashboardUrl=self.dashboard_url)
             try:
-                bootstrap = worker.enroll(platform.node() or "Draft laptop", __version__)
+                connection = self._connect_device_draft(worker)
             except WorkerError as error:
                 reason = str(error)
                 state = "revoked" if reason == "device_revoked" else "dashboard_unreachable"
                 self._health(state, reason=reason, dashboardUrl=self.dashboard_url)
                 raise
+            if connection is None:
+                self._health("stopped", dashboardUrl=self.dashboard_url)
+                return
+            bootstrap, pending_source, selected_draft, draft_options = connection
             self.draft_key = str(bootstrap["draftKey"])
             draft_url = str(bootstrap["draftUrl"])
             init = {
@@ -163,7 +363,7 @@ class Companion:
                 "totalPickSlots": int(bootstrap["totalPickSlots"]),
                 "draftSlotTeamIds": bootstrap["draftSlotTeamIds"],
             }
-            self.dashboard_url = f"{self.config.worker_base}/?draft={self.draft_key}"
+            self.dashboard_url = f"{self.config.worker_base}/?{urlencode({'draft': self.draft_key})}"
         else:
             if self.config.init_file is None or self.config.draft_key is None:
                 raise ValueError("legacy credentials require draft_key and init_file")
@@ -183,8 +383,6 @@ class Companion:
             stored = json.loads(self.config.checkpoint_file.read_text(encoding="utf-8"))
             if stored.get("draftKey") == self.draft_key:
                 self.picks = {int(p["pickNumber"]): p for p in stored.get("picks", [])}
-        signal.signal(signal.SIGTERM, self.stop)
-        signal.signal(signal.SIGINT, self.stop)
         reconnects = 0
         self._health(
             "waiting_for_draft_room",
@@ -192,15 +390,27 @@ class Companion:
             totalPicks=init["totalPickSlots"],
             reason="draft_room_not_open",
             dashboardUrl=self.dashboard_url,
+            selectedDraft=selected_draft,
+            draftOptions=draft_options,
         )
         while not self.stopping:
             source = None
             try:
-                source = self.frame_factory(
-                    self.config.chrome.debug_port,
-                    draft_url,
-                    reconnects == 0,
-                )
+                if pending_source is not None:
+                    source, pending_source = pending_source, None
+                elif selected_draft is not None:
+                    source = self.frame_factory(
+                        self.config.chrome.debug_port,
+                        draft_url,
+                        False,
+                        preferred_identity=_draft_identity(selected_draft),
+                    )
+                else:
+                    source = self.frame_factory(
+                        self.config.chrome.debug_port,
+                        draft_url,
+                        reconnects == 0,
+                    )
                 last_delivery = time.monotonic()
                 worker.heartbeat(len(self.picks), init["totalPickSlots"])
                 self._health(
@@ -209,6 +419,8 @@ class Companion:
                     totalPicks=init["totalPickSlots"],
                     reconnects=reconnects,
                     dashboardUrl=self.dashboard_url,
+                    selectedDraft=selected_draft,
+                    draftOptions=draft_options,
                 )
                 while not self.stopping:
                     changed_at = None
@@ -254,6 +466,8 @@ class Companion:
                                 reconnects=reconnects,
                                 workerRevision=ack["revision"],
                                 dashboardUrl=self.dashboard_url,
+                                selectedDraft=selected_draft,
+                                draftOptions=draft_options,
                             )
                         continue
                     observed = (
@@ -291,6 +505,8 @@ class Companion:
                         lastCommitMs=duration,
                         workerRevision=ack["revision"],
                         dashboardUrl=self.dashboard_url,
+                        selectedDraft=selected_draft,
+                        draftOptions=draft_options,
                     )
                     if complete:
                         self.stopping = True
@@ -301,6 +517,8 @@ class Companion:
                     totalPicks=init["totalPickSlots"],
                     reason="draft_room_not_open",
                     dashboardUrl=self.dashboard_url,
+                    selectedDraft=selected_draft,
+                    draftOptions=draft_options,
                 )
                 if not self.stopping:
                     self.sleeper(self.config.runtime.reconnect_seconds)
@@ -313,6 +531,8 @@ class Companion:
                     reconnects=reconnects,
                     reason="chrome_debugging_unavailable",
                     dashboardUrl=self.dashboard_url,
+                    selectedDraft=selected_draft,
+                    draftOptions=draft_options,
                 )
                 if not self.stopping:
                     try:
@@ -343,6 +563,8 @@ class Companion:
                     reconnects=reconnects,
                     reason=reason,
                     dashboardUrl=self.dashboard_url,
+                    selectedDraft=selected_draft,
+                    draftOptions=draft_options,
                 )
                 if not self.stopping:
                     self.sleeper(self.config.runtime.reconnect_seconds)
@@ -355,6 +577,8 @@ class Companion:
                     reconnects=reconnects,
                     reason="draft_stream_error",
                     dashboardUrl=self.dashboard_url,
+                    selectedDraft=selected_draft,
+                    draftOptions=draft_options,
                 )
                 if not self.stopping:
                     self.sleeper(self.config.runtime.reconnect_seconds)
@@ -370,6 +594,8 @@ class Companion:
             totalPicks=init["totalPickSlots"],
             reconnects=reconnects,
             dashboardUrl=self.dashboard_url,
+            selectedDraft=selected_draft,
+            draftOptions=draft_options,
         )
 
 
