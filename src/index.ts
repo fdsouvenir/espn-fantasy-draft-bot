@@ -1,4 +1,9 @@
-import { CompanionRegistry } from "./companion-registry";
+import {
+  CompanionRegistry,
+  type CompanionDraft,
+  type CompanionDraftIdentity,
+} from "./companion-registry";
+import type { DraftInitV1 } from "./contracts";
 import { DraftSession } from "./draft-session";
 import { MAX_INIT_BYTES, readBoundedBody, sha256Hex, verifyHmac } from "./security";
 import { validateIngest, validateInit } from "./validation";
@@ -9,6 +14,7 @@ type Route = { draftKey: string; action: "snapshot" | "health" | "ws" | "ingest"
 type CompanionAdminRoute = { deviceId: string; action: "revoke" | "enable" };
 
 const MAX_REGISTRATION_BYTES = 4 * 1024;
+const MAX_SELECTION_BYTES = 1024;
 
 const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": "default-src 'self'; connect-src 'self' wss:; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
@@ -49,7 +55,7 @@ function errorCode(error: unknown): { status: number; code: string } {
   if (message === "body_too_large") return { status: 413, code: message };
   if (message === "invalid_bearer_token") return { status: 401, code: message };
   if (message === "device_forbidden" || message === "invalid_origin" || message === "device_revoked") return { status: 403, code: message };
-  if (message === "device_not_found") return { status: 404, code: message };
+  if (message === "device_not_found" || message === "draft_not_found") return { status: 404, code: message };
   if (message === "device_token_conflict") return { status: 409, code: message };
   if (message === "registration_rate_limited") return { status: 429, code: message };
   if (message.startsWith("invalid_") || message.startsWith("unsupported_") || message === "events_not_strictly_ordered") {
@@ -90,6 +96,45 @@ function validateRegistration(value: unknown): { name: string; version: string }
   }
   if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,39}$/.test(version)) throw new Error("invalid_device_version");
   return { name, version };
+}
+
+function validateDraftSelection(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_draft_selection");
+  const draftKey = (value as Record<string, unknown>).draftKey;
+  if (typeof draftKey !== "string" || draftKey.length < 1 || draftKey.length > 240) {
+    throw new Error("invalid_draft_key");
+  }
+  return draftKey;
+}
+
+function validateDraftRooms(value: unknown): CompanionDraftIdentity[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_draft_rooms");
+  const rooms = (value as Record<string, unknown>).rooms;
+  if (!Array.isArray(rooms) || rooms.length < 1 || rooms.length > 8) throw new Error("invalid_draft_rooms");
+  return rooms.map((room) => {
+    if (!room || typeof room !== "object" || Array.isArray(room)) throw new Error("invalid_draft_room");
+    const record = room as Record<string, unknown>;
+    const leagueId = typeof record.leagueId === "string" ? record.leagueId : "";
+    const season = record.season;
+    if (!/^\d{1,12}$/.test(leagueId)) throw new Error("invalid_draft_room");
+    if (season !== null && (!Number.isInteger(season) || Number(season) < 2000 || Number(season) > 2200)) {
+      throw new Error("invalid_draft_room");
+    }
+    return { leagueId, season: season === null ? null : Number(season) };
+  });
+}
+
+function companionDraft(config: DraftInitV1, initializedAt: string): CompanionDraft | null {
+  const match = /^(?:local|staging):espn:ffl:(\d{4}):(\d{1,12}):(\d{1,15})$/.exec(config.draftKey);
+  if (!match?.[1] || !match[2] || !match[3]) return null;
+  return {
+    draftKey: config.draftKey,
+    displayName: config.displayName ?? `ESPN league ${match[2]}`,
+    season: Number(match[1]),
+    leagueId: match[2],
+    draftEpoch: Number(match[3]),
+    initializedAt,
+  };
 }
 
 async function verifyCompanionSignature(request: Request, token: string, bytes: Uint8Array): Promise<string> {
@@ -158,7 +203,6 @@ export default {
         const deviceId = validateDeviceId(request.headers.get("X-Draftside-Device") ?? "");
         const bytes = await readBoundedBody(request, MAX_REGISTRATION_BYTES);
         const registration = validateRegistration(JSON.parse(new TextDecoder().decode(bytes)));
-        const bootstrap = await env.DRAFT_SESSION.getByName(env.ACTIVE_DRAFT_KEY).getCompanionConfig();
         const registrationResult = await registry.registerDevice(
           deviceId,
           await sha256Hex(new TextEncoder().encode(token)),
@@ -167,7 +211,43 @@ export default {
           new Date().toISOString(),
         );
         if (!registrationResult.ok) throw new Error(registrationResult.error);
-        return json({ device: registrationResult.device, bootstrap }, 201);
+        return json({ device: registrationResult.device }, 201);
+      }
+      if (url.pathname === "/api/v1/companion/resolve" && request.method === "POST") {
+        routeLabel = "companion.resolve";
+        if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("invalid_content_type");
+        const token = bearerToken(request);
+        const deviceId = validateDeviceId(request.headers.get("X-Draftside-Device") ?? "");
+        const bytes = await readBoundedBody(request, MAX_SELECTION_BYTES);
+        const rooms = validateDraftRooms(JSON.parse(new TextDecoder().decode(bytes)));
+        if (!await registry.authorizeDevice(
+          deviceId,
+          await sha256Hex(new TextEncoder().encode(token)),
+          new Date().toISOString(),
+        )) {
+          throw new Error("device_forbidden");
+        }
+        return json({ drafts: await registry.resolveDrafts(rooms) });
+      }
+      if (url.pathname === "/api/v1/companion/select" && request.method === "POST") {
+        routeLabel = "companion.select";
+        if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("invalid_content_type");
+        const token = bearerToken(request);
+        const deviceId = validateDeviceId(request.headers.get("X-Draftside-Device") ?? "");
+        const bytes = await readBoundedBody(request, MAX_SELECTION_BYTES);
+        const draftKey = validateDraftSelection(JSON.parse(new TextDecoder().decode(bytes)));
+        const tokenSha256 = await sha256Hex(new TextEncoder().encode(token));
+        const selection = await registry.selectDraft(
+          deviceId,
+          tokenSha256,
+          draftKey,
+          new Date().toISOString(),
+        );
+        if (selection !== "selected") throw new Error(selection);
+        const bootstrap = await env.DRAFT_SESSION.getByName(draftKey).getCompanionConfig();
+        const draft = (await registry.listDrafts()).find((candidate) => candidate.draftKey === draftKey);
+        if (!draft) throw new Error("device_forbidden");
+        return json({ draft, bootstrap });
       }
       if (url.pathname === "/api/v1/companion/devices" && request.method === "GET") {
         routeLabel = "companion.devices.list";
@@ -200,7 +280,11 @@ export default {
           const nonce = await verifySignedRequest(request, env, bytes);
           const body = validateInit(JSON.parse(new TextDecoder().decode(bytes)));
           if (body.draftKey !== route.draftKey) throw new Error("draft_identity_conflict");
-          return json(await stub.initializeDraft(body, nonce, new Date().toISOString()), 201);
+          const initializedAt = new Date().toISOString();
+          const result = await stub.initializeDraft(body, nonce, initializedAt);
+          const draft = companionDraft(body, initializedAt);
+          if (draft) await registry.registerDraft(draft);
+          return json(result, 201);
         }
         if (route.action === "ingest" && request.method === "POST") {
           if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("invalid_content_type");
@@ -217,13 +301,18 @@ export default {
           const token = bearerToken(request);
           const deviceId = validateDeviceId(request.headers.get("X-Draftside-Device") ?? "");
           const tokenSha256 = await sha256Hex(new TextEncoder().encode(token));
-          if (!await registry.authorizeDevice(deviceId, tokenSha256, new Date().toISOString())) {
+          if (!await registry.authorizeDeviceForDraft(
+            deviceId,
+            tokenSha256,
+            route.draftKey,
+            new Date().toISOString(),
+          )) {
             throw new Error("device_forbidden");
           }
           const bytes = await readBoundedBody(request);
           const nonce = await verifyCompanionSignature(request, token, bytes);
           const body = validateIngest(JSON.parse(new TextDecoder().decode(bytes)));
-          if (body.draftKey !== route.draftKey || route.draftKey !== env.ACTIVE_DRAFT_KEY || body.events.some((event) => event.source !== "espn")) {
+          if (body.draftKey !== route.draftKey || body.events.some((event) => event.source !== "espn")) {
             throw new Error("draft_identity_conflict");
           }
           return json(await stub.ingestBatch(body, nonce, new Date().toISOString()));

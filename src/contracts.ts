@@ -66,6 +66,7 @@ export type RosterTargetsV1 = Record<StarterPosition | "FLEX", number>;
 export type DraftInitV1 = {
   schemaVersion: 1;
   draftKey: string;
+  displayName?: string;
   expectedTeams: number;
   expectedRounds: number;
   totalPickSlots: number;

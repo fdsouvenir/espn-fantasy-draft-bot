@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { CatalogPlayerV1, DraftInitV1, IngestBatchV1 } from "../src/contracts";
 import { bytesToHex, canonicalHmacInput } from "../src/security";
 
-const ACTIVE_DRAFT_KEY = "unconfigured";
+const DRAFT_KEY = "staging:espn:ffl:2026:123456789:1786494600000";
 const TOKEN = "device-token-with-more-than-thirty-two-safe-characters";
 const DEVICE_ID = "10000000-0000-4000-8000-000000000001";
 const OTHER_DEVICE_ID = "10000000-0000-4000-8000-000000000002";
@@ -34,7 +34,7 @@ function player(): CatalogPlayerV1 {
 function draftInit(): DraftInitV1 {
   return {
     schemaVersion: 1,
-    draftKey: ACTIVE_DRAFT_KEY,
+    draftKey: DRAFT_KEY,
     expectedTeams: 2,
     expectedRounds: 1,
     totalPickSlots: 2,
@@ -49,7 +49,7 @@ function draftInit(): DraftInitV1 {
 function ingestBatch(): IngestBatchV1 {
   return {
     schemaVersion: 1,
-    draftKey: ACTIVE_DRAFT_KEY,
+    draftKey: DRAFT_KEY,
     ingestorInstanceId: "companion-test",
     capturedAt: "2026-08-11T12:00:00.000Z",
     cursor: { lastOverallPick: 1 },
@@ -91,11 +91,19 @@ async function signedCompanionHeaders(pathname: string, body: Uint8Array, nonce:
 }
 
 beforeAll(async () => {
-  await env.DRAFT_SESSION.getByName(ACTIVE_DRAFT_KEY).initializeDraft(draftInit());
+  await env.DRAFT_SESSION.getByName(DRAFT_KEY).initializeDraft(draftInit());
+  await env.COMPANION_REGISTRY.getByName("primary").registerDraft({
+    draftKey: DRAFT_KEY,
+    displayName: "Test League",
+    season: 2026,
+    leagueId: "123456789",
+    draftEpoch: 1786494600000,
+    initializedAt: "2026-08-11T12:00:00.000Z",
+  });
 });
 
 describe("companion device registry", () => {
-  it("auto-registers idempotently and returns only the active draft bootstrap", async () => {
+  it("registers idempotently, resolves an observed room, and selects it explicitly", async () => {
     const register = async (name: string, token = TOKEN) => SELF.fetch("http://worker.test/api/v1/companion/register", {
       method: "POST",
       headers: {
@@ -112,8 +120,42 @@ describe("companion device registry", () => {
     expect(JSON.stringify(payload)).not.toContain(TOKEN);
     expect(payload).toMatchObject({
       device: { deviceId: DEVICE_ID, name: "Fred's laptop", version: "0.2.0", revokedAt: null },
+    });
+    expect(payload).not.toHaveProperty("drafts");
+
+    const resolved = await SELF.fetch("http://worker.test/api/v1/companion/resolve", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json",
+        "X-Draftside-Device": DEVICE_ID,
+      },
+      body: JSON.stringify({ rooms: [{ season: 2026, leagueId: "123456789" }] }),
+    });
+    expect(resolved.status).toBe(200);
+    expect(await resolved.json()).toMatchObject({
+      drafts: [{
+        draftKey: DRAFT_KEY,
+        displayName: "Test League",
+        season: 2026,
+        leagueId: "123456789",
+      }],
+    });
+
+    const selected = await SELF.fetch("http://worker.test/api/v1/companion/select", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json",
+        "X-Draftside-Device": DEVICE_ID,
+      },
+      body: JSON.stringify({ draftKey: DRAFT_KEY }),
+    });
+    expect(selected.status).toBe(200);
+    expect(await selected.json()).toMatchObject({
+      draft: { draftKey: DRAFT_KEY, displayName: "Test League" },
       bootstrap: {
-        draftKey: ACTIVE_DRAFT_KEY,
+        draftKey: DRAFT_KEY,
         expectedTeams: 2,
         totalPickSlots: 2,
         draftSlotTeamIds: ["team-1", "team-2"],
@@ -166,7 +208,7 @@ describe("companion device registry", () => {
   });
 
   it("authorizes companion HMAC ingestion and rejects unknown or revoked devices", async () => {
-    const pathname = `/api/v1/drafts/${ACTIVE_DRAFT_KEY}/companion-ingest`;
+    const pathname = `/api/v1/drafts/${DRAFT_KEY}/companion-ingest`;
     const bytes = new TextEncoder().encode(JSON.stringify(ingestBatch()));
     const accepted = await SELF.fetch(`http://worker.test${pathname}`, {
       method: "POST",

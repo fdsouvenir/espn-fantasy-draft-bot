@@ -89,6 +89,9 @@ export function validateIngest(value: unknown): IngestBatchV1 {
 export function validateInit(value: unknown): DraftInitV1 {
   if (!isRecord(value) || value.schemaVersion !== 1) throw new Error("invalid_init");
   if (!boundedString(value.draftKey, 240)) throw new Error("invalid_draft_key");
+  if (value.displayName !== undefined && !boundedString(value.displayName, 120)) {
+    throw new Error("invalid_draft_display_name");
+  }
   if (!integer(value.expectedTeams, 2, 32) || !integer(value.expectedRounds, 1, 40)) throw new Error("invalid_draft_shape");
   if (!integer(value.totalPickSlots, 1, 1000)) throw new Error("invalid_total_picks");
   if (value.totalPickSlots !== Number(value.expectedTeams) * Number(value.expectedRounds)) {
@@ -187,6 +190,7 @@ export function validateInit(value: unknown): DraftInitV1 {
   return {
     schemaVersion: 1,
     draftKey: value.draftKey,
+    ...(value.displayName === undefined ? {} : { displayName: value.displayName }),
     expectedTeams: value.expectedTeams,
     expectedRounds: value.expectedRounds,
     totalPickSlots: value.totalPickSlots,

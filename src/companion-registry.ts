@@ -9,6 +9,20 @@ export type CompanionDevice = {
   revokedAt: string | null;
 };
 
+export type CompanionDraft = {
+  draftKey: string;
+  displayName: string;
+  season: number;
+  leagueId: string;
+  draftEpoch: number;
+  initializedAt: string;
+};
+
+export type CompanionDraftIdentity = {
+  season: number | null;
+  leagueId: string;
+};
+
 export type RegistrationResult =
   | { ok: true; device: CompanionDevice }
   | { ok: false; error: "device_token_conflict" | "device_revoked" | "registration_rate_limited" };
@@ -21,6 +35,15 @@ type DeviceRow = {
   registered_at: string;
   last_seen_at: string | null;
   revoked_at: string | null;
+};
+
+type DraftRow = {
+  draft_key: string;
+  display_name: string;
+  season: number;
+  league_id: string;
+  draft_epoch: number;
+  initialized_at: string;
 };
 
 const MAX_REGISTRATIONS_PER_MINUTE = 20;
@@ -42,6 +65,19 @@ export class CompanionRegistry extends DurableObject<Env> {
         CREATE TABLE IF NOT EXISTS registration_windows (
           window_start INTEGER PRIMARY KEY,
           attempts INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS initialized_drafts (
+          draft_key TEXT PRIMARY KEY,
+          display_name TEXT NOT NULL,
+          season INTEGER NOT NULL,
+          league_id TEXT NOT NULL,
+          draft_epoch INTEGER NOT NULL,
+          initialized_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS companion_device_selections (
+          device_id TEXT PRIMARY KEY,
+          draft_key TEXT NOT NULL,
+          selected_at TEXT NOT NULL
         );
       `);
     });
@@ -109,6 +145,77 @@ export class CompanionRegistry extends DurableObject<Env> {
     return true;
   }
 
+  registerDraft(draft: CompanionDraft): CompanionDraft {
+    this.ctx.storage.sql.exec(
+      `INSERT INTO initialized_drafts
+       (draft_key, display_name, season, league_id, draft_epoch, initialized_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(draft_key) DO UPDATE SET display_name = excluded.display_name`,
+      draft.draftKey,
+      draft.displayName,
+      draft.season,
+      draft.leagueId,
+      draft.draftEpoch,
+      draft.initializedAt,
+    );
+    return this.toDraft(this.findDraft(draft.draftKey)!);
+  }
+
+  listDrafts(): CompanionDraft[] {
+    return this.ctx.storage.sql
+      .exec<DraftRow>("SELECT * FROM initialized_drafts ORDER BY draft_epoch DESC, draft_key")
+      .toArray()
+      .map((row) => this.toDraft(row));
+  }
+
+  resolveDrafts(identities: CompanionDraftIdentity[]): CompanionDraft[] {
+    const matches = new Map<string, CompanionDraft>();
+    for (const draft of this.listDrafts()) {
+      if (identities.some((identity) => (
+        identity.leagueId === draft.leagueId
+        && (identity.season === null || identity.season === draft.season)
+      ))) {
+        matches.set(draft.draftKey, draft);
+      }
+    }
+    return [...matches.values()];
+  }
+
+  selectDraft(
+    deviceId: string,
+    tokenSha256: string,
+    draftKey: string,
+    now: string,
+  ): "selected" | "device_forbidden" | "draft_not_found" {
+    if (!this.authorizeDevice(deviceId, tokenSha256, now)) return "device_forbidden";
+    if (!this.findDraft(draftKey)) return "draft_not_found";
+    this.ctx.storage.sql.exec(
+      `INSERT INTO companion_device_selections (device_id, draft_key, selected_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(device_id) DO UPDATE SET
+         draft_key = excluded.draft_key,
+         selected_at = excluded.selected_at`,
+      deviceId,
+      draftKey,
+      now,
+    );
+    return "selected";
+  }
+
+  authorizeDeviceForDraft(deviceId: string, tokenSha256: string, draftKey: string, now: string): boolean {
+    const device = this.findWithToken(deviceId, tokenSha256);
+    if (!device || device.revoked_at) return false;
+    const selection = this.ctx.storage.sql
+      .exec<{ draft_key: string }>(
+        "SELECT draft_key FROM companion_device_selections WHERE device_id = ?",
+        deviceId,
+      )
+      .toArray()[0];
+    if (selection?.draft_key !== draftKey) return false;
+    this.ctx.storage.sql.exec("UPDATE companion_devices SET last_seen_at = ? WHERE device_id = ?", now, deviceId);
+    return true;
+  }
+
   private claimRegistrationWindow(now: string): boolean {
     const windowStart = Math.floor(Date.parse(now) / 60_000) * 60_000;
     return this.ctx.storage.transactionSync(() => {
@@ -142,6 +249,12 @@ export class CompanionRegistry extends DurableObject<Env> {
       .toArray()[0] ?? null;
   }
 
+  private findDraft(draftKey: string): DraftRow | null {
+    return this.ctx.storage.sql
+      .exec<DraftRow>("SELECT * FROM initialized_drafts WHERE draft_key = ?", draftKey)
+      .toArray()[0] ?? null;
+  }
+
   private toDevice(row: DeviceRow): CompanionDevice {
     return {
       deviceId: row.device_id,
@@ -150,6 +263,17 @@ export class CompanionRegistry extends DurableObject<Env> {
       registeredAt: row.registered_at,
       lastSeenAt: row.last_seen_at,
       revokedAt: row.revoked_at,
+    };
+  }
+
+  private toDraft(row: DraftRow): CompanionDraft {
+    return {
+      draftKey: row.draft_key,
+      displayName: row.display_name,
+      season: row.season,
+      leagueId: row.league_id,
+      draftEpoch: row.draft_epoch,
+      initializedAt: row.initialized_at,
     };
   }
 }

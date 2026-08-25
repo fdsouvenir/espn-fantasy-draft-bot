@@ -282,9 +282,13 @@ def build_draft_init(
             raise DraftInitError(f"round {round_id} does not contain every team exactly once")
 
     catalog_version, catalog = _validate_catalog(catalog_document)
+    display_name = league_json.get("name")
+    if not isinstance(display_name, str) or not display_name.strip() or len(display_name.strip()) > 120:
+        display_name = f"ESPN league {league_id}"
     return {
         "schemaVersion": 1,
         "draftKey": f"{environment}:espn:ffl:{season}:{league_id}:{draft_epoch}",
+        "displayName": display_name.strip(),
         "expectedTeams": expected_teams,
         "expectedRounds": expected_rounds,
         "totalPickSlots": total_pick_slots,

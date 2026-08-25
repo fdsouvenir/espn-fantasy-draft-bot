@@ -46,8 +46,7 @@
   },
   "vars": {
     "ENVIRONMENT": "local",
-    "BUILD_VERSION": "dev",
-    "ACTIVE_DRAFT_KEY": "unconfigured"
+    "BUILD_VERSION": "dev"
   },
   "env": {
     "staging": {
@@ -74,8 +73,7 @@
       },
       "vars": {
         "ENVIRONMENT": "staging",
-        "BUILD_VERSION": "staging",
-        "ACTIVE_DRAFT_KEY": "staging:espn:ffl:2026:1588728530:1786494600000"
+        "BUILD_VERSION": "staging"
       }
     }
   }

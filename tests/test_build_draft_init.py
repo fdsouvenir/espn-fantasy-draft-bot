@@ -80,6 +80,7 @@ class DraftInitBuilderTests(unittest.TestCase):
     def test_league_shape_snake_order_and_roster_targets(self):
         result = self.build()
         self.assertEqual(result["draftKey"], "staging:espn:ffl:2026:123456789:1788033600000")
+        self.assertEqual(result["displayName"], "ESPN league 123456789")
         self.assertEqual(result["expectedTeams"], 12)
         self.assertEqual(result["expectedRounds"], 17)
         self.assertEqual(result["totalPickSlots"], 204)
