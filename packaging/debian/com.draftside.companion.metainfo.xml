@@ -43,6 +43,11 @@
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.0" date="2026-08-24">
+      <description>
+        <p>Follows the open ESPN room, supports explicit draft selection, and recovers stream reconnects.</p>
+      </description>
+    </release>
     <release version="0.3.1" date="2026-08-17">
       <description>
         <p>Corrects upgrade versioning and makes the companion strictly on demand.</p>
