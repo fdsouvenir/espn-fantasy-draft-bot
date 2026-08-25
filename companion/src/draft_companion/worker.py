@@ -266,7 +266,9 @@ class DeviceWorkerClient(WorkerClient):
             "X-Draftside-Device": self.device.device_id,
         }
 
-    def _device_post(self, pathname: str, payload: Mapping[str, Any], action: str) -> Mapping[str, Any]:
+    def _device_post(
+        self, pathname: str, payload: Mapping[str, Any], action: str
+    ) -> Mapping[str, Any]:
         body = canonical_json(payload)
         request = urllib.request.Request(
             self.base + pathname,
@@ -334,9 +336,7 @@ class DeviceWorkerClient(WorkerClient):
         return [self._validate_draft(draft, "resolution") for draft in drafts]
 
     def select_draft(self, draft_key: str) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
-        result = self._device_post(
-            "/api/v1/companion/select", {"draftKey": draft_key}, "selection"
-        )
+        result = self._device_post("/api/v1/companion/select", {"draftKey": draft_key}, "selection")
         bootstrap = self._validate_bootstrap(result.get("bootstrap"))
         draft = self._validate_draft(result.get("draft"), "selection")
         if bootstrap["draftKey"] != draft_key:

@@ -404,8 +404,7 @@ def main() -> int:
                     selection_pending = False
                 dashboard_url = _board_url(health.get("dashboardUrl"))
                 dashboard.set_sensitive(
-                    dashboard_url is not None
-                    and state in {"live", "complete", "delivery_rejected"}
+                    dashboard_url is not None and state in {"live", "complete", "delivery_rejected"}
                 )
                 selected = health.get("selectedDraft")
                 if isinstance(selected, dict) and isinstance(selected.get("displayName"), str):
@@ -419,9 +418,7 @@ def main() -> int:
                     selected_board.set_label("No draft board selected yet")
                     change_draft.set_visible(False)
                 render_options(health.get("draftOptions"))
-                picker.set_visible(
-                    state == "draft_selection_required" and not selection_pending
-                )
+                picker.set_visible(state == "draft_selection_required" and not selection_pending)
                 headline, copy = labels.get(
                     state,
                     (

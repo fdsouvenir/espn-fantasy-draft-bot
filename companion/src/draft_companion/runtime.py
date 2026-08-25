@@ -232,9 +232,7 @@ class Companion:
                     except FileNotFoundError:
                         pass
                     connected_source, source = source, None
-                    return bootstrap, connected_source, preferred, [
-                        _draft_options([preferred])[0]
-                    ]
+                    return bootstrap, connected_source, preferred, [_draft_options([preferred])[0]]
                 room_identity = getattr(source, "room_identity", None)
                 if room_identity is None and hasattr(source, "wait_for_identity"):
                     room_identity = source.wait_for_identity(1.0)
@@ -363,7 +361,9 @@ class Companion:
                 "totalPickSlots": int(bootstrap["totalPickSlots"]),
                 "draftSlotTeamIds": bootstrap["draftSlotTeamIds"],
             }
-            self.dashboard_url = f"{self.config.worker_base}/?{urlencode({'draft': self.draft_key})}"
+            self.dashboard_url = (
+                f"{self.config.worker_base}/?{urlencode({'draft': self.draft_key})}"
+            )
         else:
             if self.config.init_file is None or self.config.draft_key is None:
                 raise ValueError("legacy credentials require draft_key and init_file")

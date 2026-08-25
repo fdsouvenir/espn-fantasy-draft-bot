@@ -57,9 +57,7 @@ def draft_room_identity(url: str) -> DraftRoomIdentity | None:
         "fantasydraft.espn.com",
     }:
         return None
-    league_id = _numeric_query_value(
-        url, {"league", "leagueid", "league_id"}, 10**12
-    )
+    league_id = _numeric_query_value(url, {"league", "leagueid", "league_id"}, 10**12)
     season = _numeric_query_value(url, {"season", "seasonid", "season_id"}, 2200)
     draft_epoch = _numeric_query_value(
         url, {"draft", "draftid", "draftepoch", "draft_epoch"}, 10**15
@@ -73,19 +71,13 @@ def draft_room_identity(url: str) -> DraftRoomIdentity | None:
     )
 
 
-def identity_matches(
-    identity: DraftRoomIdentity | None, draft: DraftRoomIdentity | None
-) -> bool:
+def identity_matches(identity: DraftRoomIdentity | None, draft: DraftRoomIdentity | None) -> bool:
     if identity is None or draft is None:
         return False
     if identity.league_id is not None and draft.league_id is not None:
         if identity.league_id != draft.league_id:
             return False
-        return (
-            identity.season is None
-            or draft.season is None
-            or identity.season == draft.season
-        )
+        return identity.season is None or draft.season is None or identity.season == draft.season
     return (
         identity.draft_epoch is not None
         and draft.draft_epoch is not None
@@ -227,9 +219,7 @@ class FrameSource:
                     self.room_identity = DraftRoomIdentity(
                         season=self.room_identity.season or socket_identity.season,
                         league_id=self.room_identity.league_id or socket_identity.league_id,
-                        draft_epoch=(
-                            self.room_identity.draft_epoch or socket_identity.draft_epoch
-                        ),
+                        draft_epoch=(self.room_identity.draft_epoch or socket_identity.draft_epoch),
                     )
                 self.tracked_requests.add(request_id)
             return

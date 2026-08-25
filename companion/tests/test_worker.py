@@ -171,7 +171,7 @@ def test_device_client_enrolls_and_ingests_without_shared_access_credentials():
                         "totalPickSlots": 2,
                         "draftSlotTeamIds": ["1", "2"],
                         "draftUrl": "https://fantasy.espn.com/football/draft",
-                    }
+                    },
                 }
             )
         payload = json.loads(request.data)
@@ -190,9 +190,7 @@ def test_device_client_enrolls_and_ingests_without_shared_access_credentials():
         "https://worker.example.com", device, 5, opener=opener, clock=lambda: 123
     )
     assert client.enroll("Fred's laptop", "0.2.0") is None
-    assert client.resolve_drafts([{"season": 2026, "leagueId": "1"}])[0][
-        "draftKey"
-    ] == "draft:auto"
+    assert client.resolve_drafts([{"season": 2026, "leagueId": "1"}])[0]["draftKey"] == "draft:auto"
     assert client.select_draft("draft:auto")[0]["draftKey"] == "draft:auto"
     client.heartbeat(0, 2)
 
