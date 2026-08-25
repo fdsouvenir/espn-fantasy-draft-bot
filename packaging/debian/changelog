@@ -1,3 +1,10 @@
+draftside-companion (0.4.1-1) unstable; urgency=medium
+
+  * Stop Draftside and its managed Chrome window when the status window closes.
+  * Explain the close behavior directly in the status window.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Tue, 25 Aug 2026 11:05:02 -0500
+
 draftside-companion (0.4.0-1) unstable; urgency=medium
 
   * Follow the ESPN draft room open on each enrolled companion device.
