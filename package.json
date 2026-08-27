@@ -7,10 +7,10 @@
     "dev": "wrangler dev --local",
     "typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
-    "lint": "biome lint src tests web",
+    "lint": "biome lint api src tests web",
     "test": "vitest run",
     "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
-    "check": "npm run typegen && npm run typecheck && npm run lint && npm test && npm run test:python && node --check web/app.js && wrangler deploy --env staging --dry-run"
+    "check": "npm run typegen && npm run typecheck && npm run lint && npm test && npm run test:python && node --check web/app.js && node --check apps-script/Code.js && wrangler deploy --env staging --dry-run"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.8",

@@ -236,6 +236,56 @@ describe("validateResearchPublication", () => {
     expect(validateResearchPublication(publication).profiles[0]?.profile.researchedRole).toBe("clear-lead");
   });
 
+  it("allows a needs-review profile to report that no player-specific source was found", () => {
+    const result = validateResearchPublication({
+      ...publication,
+      profiles: [{
+        ...publication.profiles[0],
+        profile: {
+          ...profile,
+          researchedRole: null,
+          researchState: "insufficient-evidence",
+          publicationStatus: "needs-review",
+          supportingObservationIds: [],
+          sourceUrls: [],
+          expiresAt: null,
+        },
+      }],
+    });
+    expect(result.profiles[0]?.profile.sourceUrls).toEqual([]);
+    expect(() => validateResearchPublication({
+      ...publication,
+      profiles: [{
+        ...publication.profiles[0],
+        profile: { ...profile, sourceUrls: [] },
+      }],
+    })).toThrow("invalid_research_profile");
+  });
+
+  it("requires expiration for published profiles but not unsupported review exceptions", () => {
+    expect(validateResearchPublication({
+      ...publication,
+      profiles: [{
+        ...publication.profiles[0],
+        profile: {
+          ...profile,
+          researchedRole: null,
+          researchState: "insufficient-evidence",
+          publicationStatus: "needs-review",
+          sourceUrls: [],
+          expiresAt: null,
+        },
+      }],
+    }).profiles[0]?.profile.expiresAt).toBeNull();
+    expect(() => validateResearchPublication({
+      ...publication,
+      profiles: [{
+        ...publication.profiles[0],
+        profile: { ...profile, expiresAt: null },
+      }],
+    })).toThrow("invalid_research_profile");
+  });
+
   it("rejects an unknown matched role while preserving taxonomy-gap as the escape hatch", () => {
     expect(() => validateResearchPublication({
       ...publication,

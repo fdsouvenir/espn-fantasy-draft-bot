@@ -4,9 +4,11 @@ Status: implemented shared contract
 
 ## Ownership
 
-Verl publishes conclusions. Draftside validates identity and shape, stores one atomic publication,
-emits non-authoritative warnings, and presents the result. Software never derives a role from Sheet
-cells, changes Verl's role, manufactures a midpoint, or feeds research into `pickNowScore`.
+Verl publishes conclusions by completing the reviewed Sheet rows and requesting a release.
+Draftside mechanically converts those final cells into the runtime object, validates identity and
+shape, stores one atomic publication, emits non-authoritative warnings, and presents the result.
+Verl does not construct JSON. Software never derives a role from Sheet cells, changes Verl's role,
+manufactures a midpoint, or feeds research into `pickNowScore`.
 
 `player_key` is `espn:<signed integer>`. The exact `espn:-1` ESPN sentinel is invalid; legitimate
 signed D/ST IDs remain valid.
@@ -24,7 +26,7 @@ Every published player has the shared profile below plus a small position-specif
 | Judgment | confidence and reason, alternatives considered, unresolved questions |
 | Evidence | supporting/contradicting observation IDs and direct HTTPS source URLs |
 | Findings | the position's structured core plus open-ended `additionalFindings` |
-| Freshness | evidence cutoff, researched, classified, and expiration times plus `classifiedBy` |
+| Freshness | evidence cutoff, researched, classified, optional review-exception expiration, and `classifiedBy` |
 
 No row means **unresearched**. A row that could not reach a definitive answer uses one of these
 research states: `insufficient-evidence`, `conflicting-evidence`, or `stale`. Put the useful
@@ -67,7 +69,7 @@ reclassifying anyone.
 
 ## Atomic publication
 
-Verl builds one `ResearchPublicationV1` JSON object:
+The Draftside publisher builds one `ResearchPublicationV1` object from final Sheet rows:
 
 - publication schema `1`;
 - profile schema `2`;
@@ -77,18 +79,26 @@ Verl builds one `ResearchPublicationV1` JSON object:
 - team snapshots; and
 - one unique profile per ESPN player key.
 
-Publish with:
+Verl triggers the release by setting a new request ID, timestamp, and actor in `Publish Control`,
+then setting `request_state` to `REQUESTED` last. The automatic Apps Script trigger and the manual
+**Draftside → Publish research now** menu item invoke the same importer.
+
+The local operator fallback is:
 
 ```bash
-RESEARCH_HMAC_CURRENT='<secret>' python scripts/publish_research.py \
-  --publication research-publication.json \
-  --worker-base https://draftside.example
+DRAFTSIDE_PUBLISH_TRIGGER_TOKEN='<secret>' python scripts/trigger_research_publish.py \
+  --spreadsheet-id '<sheet-id>' \
+  --account '<google-account>' \
+  --requested-by 'Fred/manual' \
+  --publisher-url https://publisher.example/api/research/publish
 ```
 
-The publisher transports Verl-authored JSON; it does not parse the Sheet or classify players. The
-Worker verifies a research-specific HMAC, validates the whole batch, matches profiles to the pinned
-ESPN catalog, and commits all or none. A failed batch preserves the last valid publication. An
-identical replay is idempotent; reusing a publication ID with different content is a conflict.
+The importer copies exact fields and parses declared JSON, lists, booleans, numbers, and ranges. It
+does not infer missing values, normalize unsupported labels, or classify players. The signing relay
+holds the Worker secret; Apps Script and Verl hold only the narrower trigger capability. The Worker
+verifies a research-specific HMAC, validates the whole batch, matches profiles to the pinned ESPN
+catalog, and commits all or none. A failed batch preserves the last valid publication. An identical
+replay is idempotent; reusing a publication ID with different content is a conflict.
 
 Invalid identity, unknown fields, invalid bounds, and malformed timestamps reject the whole batch.
 Warnings can flag staleness, incomplete team closure, taxonomy gaps, needs-review rows,
@@ -98,7 +108,9 @@ Warnings never rewrite Verl's answer.
 ## Sheet-only workflow fields
 
 The Sheet separates `workflow_status` (`working`, `superseded`) from deployable
-`publication_status` (`needs-review`, `published`). Verl excludes working and superseded rows from
-the publication object. Profile `player_name`, Team Snapshot `team_context_json`, and verification
-metadata are research conveniences and never enter the runtime contract. The read-only Sheet
-contract check rejects header or vocabulary drift before publication.
+`publication_status` (`needs-review`, `published`). Clear `workflow_status` when a current row is
+final; use `working` only while drafting and `superseded` only for retained history. The importer
+rejects deployable rows still marked `working` and ignores superseded rows. Profile `player_name`,
+Team Snapshot `team_context_json`, and verification metadata are research conveniences and never
+enter the runtime contract. The read-only Sheet contract check rejects header or vocabulary drift
+before publication.

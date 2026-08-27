@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["./worker-configuration.d.ts"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": ["api/**/*.ts", "src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
 }

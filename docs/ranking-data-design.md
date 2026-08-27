@@ -98,9 +98,10 @@ Legacy Role Overrides and Tiers & Flags data are not active inputs.
 
 ## 5. Handoff and runtime representation
 
-There is no Sheet compiler.
+There is no research classifier in software.
 
-Verl publishes one atomic `ResearchPublicationV1` containing team snapshots and
+Verl requests a release after finalizing the Sheet. Draftside mechanically builds one atomic
+`ResearchPublicationV1` containing team snapshots and
 `ResearchProfileV2` records for canonical player keys. The transport boundary:
 
 1. matches `espn:<signed id>` to the catalog player;

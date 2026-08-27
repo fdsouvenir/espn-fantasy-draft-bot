@@ -145,7 +145,7 @@ function definiteRoleContradictions(publication: ResearchPublicationV1): Researc
     if (profile.publicationStatus === "needs-review") {
       warnings.push(warning("needs-review", "Verl marked this conclusion for exception review.", playerKey, nflTeam));
     }
-    if (Date.parse(profile.expiresAt) <= Date.parse(publication.publishedAt)) {
+    if (profile.expiresAt !== null && Date.parse(profile.expiresAt) <= Date.parse(publication.publishedAt)) {
       warnings.push(warning("profile-stale", "The profile was already expired when this batch was published.", playerKey, nflTeam));
     }
     if (findings.position === "WR" && role === "clear-target-leader") {

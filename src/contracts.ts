@@ -178,7 +178,7 @@ export type ResearchProfileV2 = {
   additionalFindings: Record<string, ResearchFindingValue>;
   researchedAt: string;
   classifiedAt: string;
-  expiresAt: string;
+  expiresAt: string | null;
   classifiedBy: string;
 };
 

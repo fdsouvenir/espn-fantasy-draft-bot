@@ -211,7 +211,7 @@ function validResearchProfile(value: unknown): value is ResearchProfileV2 {
     !stringArray(value.supportingObservationIds, 100, 120) ||
     !stringArray(value.contradictingObservationIds, 100, 120) ||
     !stringArray(value.sourceUrls, 100, 1_000) ||
-    value.sourceUrls.length === 0 ||
+    (value.publicationStatus === "published" && value.sourceUrls.length === 0) ||
     !value.sourceUrls.every((url) => url.startsWith("https://")) ||
     !validStructuredFindings(value.structuredFindings, position) ||
     !validResearchFindings(value.additionalFindings)
@@ -221,7 +221,8 @@ function validResearchProfile(value: unknown): value is ResearchProfileV2 {
   if (
     !validDate(value.researchedAt) ||
     !validDate(value.classifiedAt) ||
-    !validDate(value.expiresAt) ||
+    (value.expiresAt !== null && !validDate(value.expiresAt)) ||
+    (value.publicationStatus === "published" && value.expiresAt === null) ||
     !boundedString(value.classifiedBy, 120)
   ) {
     return false;
@@ -229,7 +230,7 @@ function validResearchProfile(value: unknown): value is ResearchProfileV2 {
   if (
     Date.parse(value.evidenceCutoffAt) > Date.parse(value.researchedAt) ||
     Date.parse(value.researchedAt) > Date.parse(value.classifiedAt) ||
-    Date.parse(value.classifiedAt) >= Date.parse(value.expiresAt)
+    (value.expiresAt !== null && Date.parse(value.classifiedAt) >= Date.parse(value.expiresAt))
   ) {
     return false;
   }

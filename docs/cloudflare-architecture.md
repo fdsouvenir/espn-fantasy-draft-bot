@@ -266,7 +266,11 @@ D1 becomes useful for immutable, versioned shared data:
 - `players(snapshot_version, player_id, name, position, nfl_team, bye_week, ...)`
 - `rank_inputs(snapshot_version, player_id, tier, role, workload, contingent_upside, adp, confidence, source_date, ...)`
 
-The Google Sheet is Verl's research database, never a live draft dependency. Verl publishes an immutable profile snapshot; the handoff checks identity and transport shape without reclassifying or scoring the research. Draft initialization pins one version and copies the required profiles into the DO. Updates create a new version; they do not mutate the active draft's catalog.
+The Google Sheet is Verl's research database, never a live draft dependency. Verl requests release
+after finalizing reviewed rows; Draftside mechanically imports them into an immutable profile
+snapshot. The handoff checks identity and transport shape without reclassifying or scoring the
+research. Draft initialization pins one version and copies the required profiles into the DO.
+Updates create a new version; they do not mutate the active draft's catalog.
 
 Do not add D1 merely to duplicate `picks`. Cross-product transactions do not exist between D1 and a DO, so that would weaken the live consistency model.
 
