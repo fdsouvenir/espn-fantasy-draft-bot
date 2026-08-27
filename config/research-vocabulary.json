@@ -25,6 +25,31 @@
     "weak",
     "unknown"
   ],
+  "sourceSelectionRubric": {
+    "version": "2026.1",
+    "minimumScore": 0,
+    "maximumScore": 5,
+    "weights": {
+      "original_reporting_score": 0.35,
+      "role_coverage_score": 0.3,
+      "posting_consistency_score": 0.25,
+      "correction_transparency_score": 0.1
+    },
+    "hardGates": [
+      "active",
+      "attends_camp",
+      "camp_evidence_url",
+      "profile_url",
+      "primary_original_reporting"
+    ],
+    "tieBreakers": [
+      "original_reporting_score",
+      "role_coverage_score",
+      "posting_consistency_score",
+      "correction_transparency_score",
+      "x_handle"
+    ]
+  },
   "rolesByPosition": {
     "QB": [
       "locked-dual-threat",

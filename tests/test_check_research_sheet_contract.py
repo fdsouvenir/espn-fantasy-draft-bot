@@ -57,6 +57,16 @@ class ResearchSheetContractTests(unittest.TestCase):
     def test_accepts_matching_headers_and_vocabularies(self):
         self.assertEqual(module.check_contract(self.manifest, self.valid_values()), [])
 
+    def test_source_selection_weights_cover_the_four_sheet_scores(self):
+        rubric = self.manifest["sourceSelectionRubric"]
+        score_headers = {
+            header
+            for header in self.manifest["sheet"]["workflowTabHeaders"]["Source Registry"]
+            if header.endswith("_score") and header != "weighted_score"
+        }
+        self.assertEqual(set(rubric["weights"]), score_headers)
+        self.assertAlmostEqual(sum(rubric["weights"].values()), 1.0)
+
     def test_accepts_ragged_google_value_rows(self):
         values = self.valid_values()
         values["Lists!A1:V100"] = [

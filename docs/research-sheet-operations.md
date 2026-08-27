@@ -57,6 +57,10 @@ publication may contain only the three completed team snapshots and their covere
 Keep any generated pilot publication under the ignored `artifacts/` directory. Contract checking
 is read-only, and publication remains a separate, explicit operator action after human review.
 
+`Source Registry.weighted_score` is a Sheet formula implementing the approved `2026.1` source
+rubric. Verl supplies the four evidence-backed 0–5 component scores; the Sheet performs only the
+published arithmetic and does not judge source quality or player roles.
+
 ## Column ownership
 
 These profile columns are Sheet-only: `player_name` and `workflow_status`. The workflow status is
