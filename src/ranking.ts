@@ -11,18 +11,7 @@ export type RankingContext = {
   rosterTargets?: Partial<Record<"QB" | "RB" | "WR" | "TE" | "FLEX", number>>;
 };
 
-type EditorialWorkload = Record<string, { low?: number; mid: number; high?: number }>;
-
-type RankablePlayer = CatalogPlayerV1 & {
-  editorialWorkload?: EditorialWorkload;
-  editorialOpportunityEvidenceCoverage?: number;
-  targetFlag?: "target" | "neutral" | "avoid";
-  targetAdjustment?: number;
-  doNotTakeBefore?: number | null;
-  doNotPassAfter?: number | null;
-};
-
-type ScoredPlayer = RankablePlayer & {
+type ScoredPlayer = CatalogPlayerV1 & {
   intrinsicComposite: number;
   projectionPercentile: number;
   marketPercentile: number;
@@ -137,23 +126,12 @@ function empiricalPercentiles(
 function scoreIntrinsic(players: CatalogPlayerV1[]): ScoredPlayer[] {
   const projections = empiricalPercentiles(players, (player) => player.projectedPoints, true, true);
   const market = empiricalPercentiles(players, (player) => player.adp, false, false);
-  return players.map((basePlayer) => {
-    const player = basePlayer as RankablePlayer;
+  return players.map((player) => {
     const projectionPercentile = projections.get(player.playerId) ?? 50;
     const marketPercentile = market.get(player.playerId) ?? 50;
     const roleDepthScore = 0.65 * roleScore(player.roleClass) + 0.35 * depthScore(player);
-    const editorialCoverage = clamp(player.editorialOpportunityEvidenceCoverage ?? 0, 0, 1);
-    const normalizedEditorialOpportunity = editorialCoverage > 0
-      ? clamp(player.opportunityScore / editorialCoverage, 0, 100)
-      : player.opportunityScore;
-    const workloadMids = Object.values(player.editorialWorkload ?? {})
-      .map((range) => range.mid)
-      .filter(Number.isFinite);
-    const workloadSignal = workloadMids.length > 0
-      ? 100 * workloadMids.reduce((total, midpoint) => total + midpoint, 0) / workloadMids.length
-      : normalizedEditorialOpportunity;
     const opportunity = clamp(
-      0.4 * normalizedEditorialOpportunity + 0.2 * workloadSignal + 0.4 * roleDepthScore,
+      0.6 * player.opportunityScore + 0.4 * roleDepthScore,
       0,
       100,
     );
@@ -481,20 +459,6 @@ function contextualize(
     ? 0
     : 8 * clamp((0.75 - returnProbability) / 0.75, 0, 1);
   const injury = injuryPenalty(player);
-  const suppliedEditorialAdjustment = clamp(player.targetAdjustment ?? 0, -6, 6);
-  const editorialAdjustment = player.targetFlag === "avoid"
-    ? Math.min(-4, suppliedEditorialAdjustment)
-    : player.targetFlag === "target"
-      ? Math.max(2, suppliedEditorialAdjustment)
-      : suppliedEditorialAdjustment;
-  const guardrailPenalty = context?.currentPick !== null && context?.currentPick !== undefined &&
-    player.doNotTakeBefore !== null && player.doNotTakeBefore !== undefined && context.currentPick < player.doNotTakeBefore
-    ? -6
-    : 0;
-  const guardrailUrgency = context?.currentPick !== null && context?.currentPick !== undefined &&
-    player.doNotPassAfter !== null && player.doNotPassAfter !== undefined && context.currentPick >= player.doNotPassAfter
-    ? 6
-    : 0;
   const reasons = [...player.reasons];
   const risks = [...player.risks];
 
@@ -504,10 +468,6 @@ function contextualize(
   if (fit >= 3) reasons.push(`Open ${player.position} starter or flex slot`);
   if (marketValue >= 1) reasons.push(`Fell past ESPN ADP ${player.adp?.toFixed(1)}`);
   if (returnUrgency >= 2) reasons.push("Unlikely to return through intervening picks");
-  if (editorialAdjustment > 0 || player.targetFlag === "target") reasons.push("Reviewed Sheet target adjustment");
-  if (editorialAdjustment < 0 || player.targetFlag === "avoid") risks.push("Reviewed Sheet avoid adjustment");
-  if (guardrailPenalty < 0) risks.push(`Do not take before pick ${player.doNotTakeBefore}`);
-  if (guardrailUrgency > 0) reasons.push(`Do not pass after pick ${player.doNotPassAfter}`);
   if (injury.penalty > 0) risks.push(`ESPN injury status: ${injury.status}`);
   if (fit <= -10 && (player.position === "K" || isDefense(player.position))) risks.push("K/DST suppressed while skill-position slots remain open");
 
@@ -516,8 +476,8 @@ function contextualize(
     intrinsicScore: round(player.intrinsicComposite, 2),
     pickNowScore: round(
       clamp(
-        0.78 * player.intrinsicComposite + scarcity + fit + marketValue + returnUrgency +
-          editorialAdjustment + guardrailPenalty + guardrailUrgency - injury.penalty,
+        0.78 * player.intrinsicComposite + scarcity + fit + marketValue + returnUrgency -
+          injury.penalty,
         0,
         100,
       ),

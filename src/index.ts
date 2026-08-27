@@ -1,20 +1,24 @@
 import {
-  CompanionRegistry,
   type CompanionDraft,
   type CompanionDraftIdentity,
+  CompanionRegistry,
 } from "./companion-registry";
 import type { DraftInitV1 } from "./contracts";
 import { DraftSession } from "./draft-session";
 import { MAX_INIT_BYTES, readBoundedBody, sha256Hex, verifyHmac } from "./security";
-import { validateIngest, validateInit } from "./validation";
+import { validateIngest, validateInit, validateResearchPublication } from "./validation";
 
 export { CompanionRegistry, DraftSession };
 
-type Route = { draftKey: string; action: "snapshot" | "health" | "ws" | "ingest" | "companion-ingest" | "initialize" };
+type Route = {
+  draftKey: string;
+  action: "snapshot" | "health" | "ws" | "ingest" | "companion-ingest" | "initialize" | "research";
+};
 type CompanionAdminRoute = { deviceId: string; action: "revoke" | "enable" };
 
 const MAX_REGISTRATION_BYTES = 4 * 1024;
 const MAX_SELECTION_BYTES = 1024;
+const MAX_RESEARCH_BYTES = 2 * 1024 * 1024;
 
 const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": "default-src 'self'; connect-src 'self' wss:; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
@@ -26,7 +30,7 @@ const SECURITY_HEADERS: Record<string, string> = {
 };
 
 function parseRoute(pathname: string): Route | null {
-  const match = /^\/api\/v1\/drafts\/([^/]+)\/(snapshot|health|ws|ingest|companion-ingest|initialize)$/.exec(pathname);
+  const match = /^\/api\/v1\/drafts\/([^/]+)\/(snapshot|health|ws|ingest|companion-ingest|initialize|research)$/.exec(pathname);
   if (!match?.[1] || !match[2]) return null;
   return { draftKey: decodeURIComponent(match[1]), action: match[2] as Route["action"] };
 }
@@ -49,7 +53,15 @@ function json(value: unknown, status = 200): Response {
 
 function errorCode(error: unknown): { status: number; code: string } {
   const message = error instanceof Error ? error.message : "internal_error";
-  if (message === "pick_conflict" || message === "event_id_conflict" || message === "draft_identity_conflict" || message === "draft_init_conflict") return { status: 409, code: message };
+  if (
+    message === "pick_conflict" ||
+    message === "event_id_conflict" ||
+    message === "draft_identity_conflict" ||
+    message === "draft_init_conflict" ||
+    message === "research_publication_conflict"
+  ) {
+    return { status: 409, code: message };
+  }
   if (message === "nonce_replay") return { status: 409, code: message };
   if (message === "draft_uninitialized") return { status: 409, code: message };
   if (message === "body_too_large") return { status: 413, code: message };
@@ -184,6 +196,44 @@ async function verifySignedRequest(request: Request, env: Env, bytes: Uint8Array
   return nonce;
 }
 
+async function verifyResearchSignature(request: Request, env: Env, bytes: Uint8Array): Promise<string> {
+  const timestamp = request.headers.get("X-Draft-Timestamp") ?? "";
+  const nonce = request.headers.get("X-Draft-Nonce") ?? "";
+  const signature = request.headers.get("X-Draft-Signature") ?? "";
+  if (
+    !/^\d{10}$/.test(timestamp) ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nonce)
+  ) {
+    throw new Error("invalid_signature_headers");
+  }
+  if (Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) > 60) {
+    throw new Error("invalid_signature_time");
+  }
+  const previous = (env as Env & { RESEARCH_HMAC_PREVIOUS?: string }).RESEARCH_HMAC_PREVIOUS;
+  const validCurrent = await verifyHmac(
+    env.RESEARCH_HMAC_CURRENT,
+    timestamp,
+    nonce,
+    request.method,
+    new URL(request.url).pathname,
+    bytes,
+    signature,
+  );
+  const validPrevious = !validCurrent && previous
+    ? await verifyHmac(
+        previous,
+        timestamp,
+        nonce,
+        request.method,
+        new URL(request.url).pathname,
+        bytes,
+        signature,
+      )
+    : false;
+  if (!validCurrent && !validPrevious) throw new Error("invalid_signature");
+  return nonce;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const requestId = crypto.randomUUID();
@@ -271,6 +321,9 @@ export default {
         const stub = env.DRAFT_SESSION.getByName(route.draftKey);
         if (route.action === "snapshot" && request.method === "GET") return json(await stub.getSnapshot());
         if (route.action === "health" && request.method === "GET") return json(await stub.getHealth());
+        if (route.action === "research" && request.method === "GET") {
+          return json(await stub.getResearchPublication());
+        }
         if (route.action === "ws" && request.method === "GET" && request.headers.get("Upgrade") === "websocket") {
           return stub.fetch(request);
         }
@@ -295,6 +348,16 @@ export default {
             throw new Error("draft_identity_conflict");
           }
           return json(await stub.ingestBatch(body, nonce, new Date().toISOString()));
+        }
+        if (route.action === "research" && request.method === "POST") {
+          if (!request.headers.get("content-type")?.startsWith("application/json")) {
+            throw new Error("invalid_content_type");
+          }
+          const bytes = await readBoundedBody(request, MAX_RESEARCH_BYTES);
+          const nonce = await verifyResearchSignature(request, env, bytes);
+          const body = validateResearchPublication(JSON.parse(new TextDecoder().decode(bytes)));
+          if (body.draftKey !== route.draftKey) throw new Error("draft_identity_conflict");
+          return json(await stub.publishResearch(body, nonce, new Date().toISOString()), 201);
         }
         if (route.action === "companion-ingest" && request.method === "POST") {
           if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("invalid_content_type");

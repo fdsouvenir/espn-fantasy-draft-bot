@@ -8,8 +8,12 @@ import type {
   DraftSnapshot,
   IngestAck,
   IngestBatchV1,
+  ResearchPublicationAckV1,
+  ResearchPublicationV1,
+  ResearchSnapshotV1,
 } from "./contracts";
 import { rankAvailable } from "./ranking";
+import { auditResearchPublication, researchInventoryBucket } from "./research";
 
 type MetaRow = {
   draft_key: string;
@@ -37,11 +41,28 @@ type PickRow = {
 
 type CatalogRow = { ranking_payload_json: string };
 type ContextRow = { init_context_json: string };
+type ResearchMetaRow = {
+  publication_id: string;
+  research_revision: number;
+  fingerprint: string;
+  publication_json: string;
+  warnings_json: string;
+};
+type ResearchProfileRow = { player_id: string; profile_json: string };
 
 type PersistedDraftContext = Pick<
   DraftInitV1,
   "expectedTeams" | "expectedRounds" | "managedTeamId" | "draftSlotTeamIds" | "rosterTargets"
 >;
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
 
 export const INGESTOR_STALE_AFTER_SECONDS = 45;
 export const INGESTOR_DEAD_AFTER_SECONDS = 120;
@@ -85,6 +106,18 @@ export class DraftSession extends DurableObject<Env> {
         CREATE TABLE IF NOT EXISTS draft_context (
           singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
           init_context_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS research_publication (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          publication_id TEXT NOT NULL,
+          research_revision INTEGER NOT NULL,
+          fingerprint TEXT NOT NULL,
+          publication_json TEXT NOT NULL,
+          warnings_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS research_profiles (
+          player_id TEXT PRIMARY KEY,
+          profile_json TEXT NOT NULL
         );
       `);
     });
@@ -222,6 +255,66 @@ export class DraftSession extends DurableObject<Env> {
     return ack;
   }
 
+  async publishResearch(
+    publication: ResearchPublicationV1,
+    nonce: string,
+    receivedAt: string,
+  ): Promise<ResearchPublicationAckV1> {
+    const meta = this.meta();
+    if (!meta) throw new Error("draft_uninitialized");
+    if (publication.draftKey !== meta.draft_key) throw new Error("draft_identity_conflict");
+    const warnings = auditResearchPublication(publication, this.catalog());
+    const fingerprint = await this.researchFingerprint(publication);
+    const existing = this.researchMeta();
+    if (existing?.publication_id === publication.publicationId) {
+      if (existing.fingerprint !== fingerprint) throw new Error("research_publication_conflict");
+      this.ctx.storage.transactionSync(() => {
+        this.claimNonce(nonce, receivedAt);
+        this.pruneNonces(receivedAt);
+      });
+      return this.researchAck(existing, false);
+    }
+    const researchRevision = (existing?.research_revision ?? 0) + 1;
+    this.ctx.storage.transactionSync(() => {
+      this.claimNonce(nonce, receivedAt);
+      this.ctx.storage.sql.exec("DELETE FROM research_profiles");
+      for (const entry of publication.profiles) {
+        this.ctx.storage.sql.exec(
+          "INSERT INTO research_profiles (player_id, profile_json) VALUES (?, ?)",
+          entry.playerKey.slice("espn:".length),
+          JSON.stringify(entry.profile),
+        );
+      }
+      this.ctx.storage.sql.exec(
+        `INSERT INTO research_publication
+         (singleton, publication_id, research_revision, fingerprint, publication_json, warnings_json)
+         VALUES (1, ?, ?, ?, ?, ?)
+         ON CONFLICT(singleton) DO UPDATE SET
+           publication_id = excluded.publication_id,
+           research_revision = excluded.research_revision,
+           fingerprint = excluded.fingerprint,
+           publication_json = excluded.publication_json,
+           warnings_json = excluded.warnings_json`,
+        publication.publicationId,
+        researchRevision,
+        fingerprint,
+        JSON.stringify(publication),
+        JSON.stringify(warnings),
+      );
+      this.ctx.storage.sql.exec("UPDATE draft_meta SET revision = revision + 1 WHERE singleton = 1");
+      this.pruneNonces(receivedAt);
+    });
+    const stored = this.researchMeta();
+    if (!stored) throw new Error("research_publication_missing");
+    const ack = this.researchAck(stored, true);
+    this.broadcastResearch(ack);
+    return ack;
+  }
+
+  getResearchPublication(): ResearchPublicationV1 | null {
+    return this.researchPublication();
+  }
+
   async getSnapshot(): Promise<DraftSnapshot> {
     const meta = this.meta();
     if (!meta) return this.uninitializedSnapshot();
@@ -232,10 +325,29 @@ export class DraftSession extends DurableObject<Env> {
       roster.push(pick);
       rosters[pick.teamId] = roster;
     }
-    const catalog = this.ctx.storage.sql
-      .exec<CatalogRow>("SELECT ranking_payload_json FROM catalog_players")
-      .toArray()
-      .map((row) => JSON.parse(row.ranking_payload_json) as CatalogPlayerV1);
+    const publishedProfiles = new Map(
+      this.ctx.storage.sql
+        .exec<ResearchProfileRow>("SELECT player_id, profile_json FROM research_profiles")
+        .toArray()
+        .map((row) => [
+          row.player_id,
+          JSON.parse(row.profile_json) as NonNullable<CatalogPlayerV1["researchProfile"]>,
+        ]),
+    );
+    const hasPublishedResearch = this.researchMeta() !== null;
+    const catalog = this.catalog().map((player) => {
+      const profile = publishedProfiles.get(player.playerId) ??
+        (hasPublishedResearch ? undefined : player.researchProfile);
+      if (!profile) {
+        const { researchProfile: _profile, researchInventoryBucket: _bucket, ...withoutResearch } = player;
+        return withoutResearch;
+      }
+      return {
+        ...player,
+        researchProfile: profile,
+        researchInventoryBucket: researchInventoryBucket(player.position, profile.researchedRole) ?? undefined,
+      };
+    });
     const context = this.context();
     if (!context) throw new Error("draft_context_missing");
     const catalogById = new Map(catalog.map((player) => [player.playerId, player]));
@@ -271,6 +383,7 @@ export class DraftSession extends DurableObject<Env> {
       recommendations: health.hasGap || health.conflictCount > 0 || health.stale
         ? []
         : available.slice(0, 3),
+      research: this.researchSnapshot(),
       health,
       pinnedCatalogVersion: meta.pinned_catalog_version,
       serverTime: new Date().toISOString(),
@@ -317,6 +430,40 @@ export class DraftSession extends DurableObject<Env> {
 
   private meta(): MetaRow | null {
     return this.ctx.storage.sql.exec<MetaRow>("SELECT * FROM draft_meta WHERE singleton = 1").toArray()[0] ?? null;
+  }
+
+  private catalog(): CatalogPlayerV1[] {
+    return this.ctx.storage.sql
+      .exec<CatalogRow>("SELECT ranking_payload_json FROM catalog_players")
+      .toArray()
+      .map((row) => JSON.parse(row.ranking_payload_json) as CatalogPlayerV1);
+  }
+
+  private researchMeta(): ResearchMetaRow | null {
+    return this.ctx.storage.sql
+      .exec<ResearchMetaRow>("SELECT * FROM research_publication WHERE singleton = 1")
+      .toArray()[0] ?? null;
+  }
+
+  private researchSnapshot(): ResearchSnapshotV1 | null {
+    const row = this.researchMeta();
+    if (!row) return null;
+    const publication = JSON.parse(row.publication_json) as ResearchPublicationV1;
+    return {
+      publicationId: publication.publicationId,
+      researchRevision: row.research_revision,
+      roleVocabularyVersion: publication.roleVocabularyVersion,
+      rubricVersion: publication.rubricVersion,
+      publishedAt: publication.publishedAt,
+      publishedBy: publication.publishedBy,
+      profileCount: publication.profiles.length,
+      warnings: JSON.parse(row.warnings_json) as ResearchSnapshotV1["warnings"],
+    };
+  }
+
+  private researchPublication(): ResearchPublicationV1 | null {
+    const row = this.researchMeta();
+    return row ? JSON.parse(row.publication_json) as ResearchPublicationV1 : null;
   }
 
   private pickRows(): DraftPickEventV1[] {
@@ -466,6 +613,36 @@ export class DraftSession extends DurableObject<Env> {
     }
   }
 
+  private researchAck(row: ResearchMetaRow, changed: boolean): ResearchPublicationAckV1 {
+    const snapshot = this.researchSnapshot();
+    if (!snapshot) throw new Error("research_publication_missing");
+    return {
+      publicationId: row.publication_id,
+      researchRevision: row.research_revision,
+      changed,
+      profileCount: snapshot.profileCount,
+      warnings: snapshot.warnings,
+      serverTime: new Date().toISOString(),
+    };
+  }
+
+  private broadcastResearch(ack: ResearchPublicationAckV1): void {
+    const message = JSON.stringify({
+      type: "research.updated",
+      revision: this.meta()?.revision ?? 0,
+      researchRevision: ack.researchRevision,
+      changed: ["research", "availability"],
+      serverTime: ack.serverTime,
+    });
+    for (const socket of this.ctx.getWebSockets()) {
+      try {
+        socket.send(message);
+      } catch {
+        socket.close(1011, "send_failed");
+      }
+    }
+  }
+
   private uninitializedSnapshot(): DraftSnapshot {
     return {
       schemaVersion: 1,
@@ -486,6 +663,7 @@ export class DraftSession extends DurableObject<Env> {
       draft: { current: null, round: null, roundPick: null, nextTeamPick: null, picksAway: null },
       available: [],
       recommendations: [],
+      research: null,
       health: {
         revision: 0,
         status: "uninitialized",
@@ -518,6 +696,16 @@ export class DraftSession extends DurableObject<Env> {
       rosterTargets: config.rosterTargets,
       pinnedCatalogVersion: config.pinnedCatalogVersion,
       catalog: [...config.catalog].sort((left, right) => left.playerId.localeCompare(right.playerId)),
+    });
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  private async researchFingerprint(publication: ResearchPublicationV1): Promise<string> {
+    const canonical = canonicalJson({
+      ...publication,
+      teamSnapshots: [...publication.teamSnapshots].sort((left, right) => left.nflTeam.localeCompare(right.nflTeam)),
+      profiles: [...publication.profiles].sort((left, right) => left.playerKey.localeCompare(right.playerKey)),
     });
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");

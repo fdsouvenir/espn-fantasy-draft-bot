@@ -2,11 +2,18 @@
 
 import { env, runInDurableObject, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { CatalogPlayerV1, DraftInitV1, DraftPickEventV1, IngestBatchV1 } from "../src/contracts";
-import { canonicalHmacInput, bytesToHex } from "../src/security";
+import type {
+  CatalogPlayerV1,
+  DraftInitV1,
+  DraftPickEventV1,
+  IngestBatchV1,
+  ResearchPublicationV1,
+} from "../src/contracts";
+import { bytesToHex, canonicalHmacInput } from "../src/security";
 
 const SECRET = "integration-test-secret-with-more-than-32-bytes";
 const PREVIOUS_SECRET = "integration-test-previous-secret-more-than-32-bytes";
+const RESEARCH_SECRET = "integration-test-research-secret-more-than-32-bytes";
 const encoder = new TextEncoder();
 
 function catalogPlayer(playerId: string, name: string): CatalogPlayerV1 {
@@ -74,6 +81,63 @@ function batch(draftKey: string, events: DraftPickEventV1[], overrides: Partial<
   };
 }
 
+function researchPublication(
+  draftKey: string,
+  overrides: Partial<ResearchPublicationV1> = {},
+): ResearchPublicationV1 {
+  return {
+    schemaVersion: 1,
+    draftKey,
+    publicationId: "research-2026-08-27-1",
+    roleVocabularyVersion: "2026.1",
+    rubricVersion: "2026.1-draft",
+    publishedAt: "2026-08-27T12:00:00.000Z",
+    publishedBy: "Verl",
+    teamSnapshots: [{ nflTeam: "CHI", complete: true, coveredPlayerKeys: ["espn:101"], notes: "Pilot" }],
+    profiles: [{
+      playerKey: "espn:101",
+      nflTeam: "CHI",
+      profile: {
+        schemaVersion: 2,
+        profileId: "profile-rb-101",
+        position: "RB",
+        researchedRole: "clear-lead",
+        researchState: "complete",
+        unknownReason: null,
+        taxonomyState: "matched",
+        publicationStatus: "published",
+        warRoomHeadline: "One of the remaining actual starting backs",
+        currentRoleSummary: "Leads the current backfield rotation.",
+        opportunitySummary: "Owns the most stable touch path.",
+        competitionSummary: "A second back retains passing work.",
+        availabilitySummary: "Practicing in full.",
+        draftImplication: "The role is scarcer than the ESPN rank suggests.",
+        contingency: null,
+        confidence: "high",
+        confidenceReason: "Independent current reports agree.",
+        alternativesConsidered: ["committee-1a"],
+        unresolvedQuestions: [],
+        supportingObservationIds: ["obs-1"],
+        contradictingObservationIds: [],
+        sourceUrls: ["https://example.com/report"],
+        structuredFindings: {
+          position: "RB",
+          carryShare: { low: 0.52, high: 0.64 },
+          routeShare: { low: 0.34, high: 0.48 },
+          goalLineRole: "primary",
+          backfieldRank: 1,
+        },
+        additionalFindings: {},
+        researchedAt: "2026-08-27T10:00:00.000Z",
+        classifiedAt: "2026-08-27T11:00:00.000Z",
+        expiresAt: "2026-08-30T11:00:00.000Z",
+        classifiedBy: "Verl",
+      },
+    }],
+    ...overrides,
+  };
+}
+
 async function signature(method: string, pathname: string, body: Uint8Array, timestamp: string, nonce: string, secret = SECRET): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -100,6 +164,8 @@ async function signedJsonHeaders(pathname: string, body: Uint8Array, nonce: stri
 beforeEach(() => {
   (env as Env).INGEST_HMAC_CURRENT = SECRET;
   (env as Env & { INGEST_HMAC_PREVIOUS?: string }).INGEST_HMAC_PREVIOUS = "";
+  (env as Env).RESEARCH_HMAC_CURRENT = RESEARCH_SECRET;
+  (env as Env & { RESEARCH_HMAC_PREVIOUS?: string }).RESEARCH_HMAC_PREVIOUS = "";
 });
 
 describe("DraftSession integration", () => {
@@ -111,6 +177,42 @@ describe("DraftSession integration", () => {
     const snapshot = await stub.getSnapshot();
     expect(snapshot).toMatchObject({ draftKey: "init-idempotent", status: "pre_draft", revision: 0 });
     expect(snapshot.available.map((player) => player.playerId)).toEqual(expect.arrayContaining(["101", "102", "-16010"]));
+  });
+
+  it("atomically publishes Verl research and adds presentation grouping without changing ranking", async () => {
+    const draftKey = "research-publication";
+    const stub = env.DRAFT_SESSION.getByName(draftKey);
+    await stub.initializeDraft(init(draftKey));
+    const before = await stub.getSnapshot();
+    const beforePlayer = before.available.find((player) => player.playerId === "101")!;
+    const publication = researchPublication(draftKey);
+    const first = await stub.publishResearch(publication, crypto.randomUUID(), new Date().toISOString());
+    expect(first).toMatchObject({ changed: true, researchRevision: 1, profileCount: 1, warnings: [] });
+    const replay = await stub.publishResearch(publication, crypto.randomUUID(), new Date().toISOString());
+    expect(replay).toMatchObject({ changed: false, researchRevision: 1 });
+
+    const snapshot = await stub.getSnapshot();
+    const afterPlayer = snapshot.available.find((player) => player.playerId === "101")!;
+    expect(snapshot.research).toMatchObject({ publicationId: publication.publicationId, profileCount: 1 });
+    expect(afterPlayer.researchProfile?.researchedRole).toBe("clear-lead");
+    expect(afterPlayer.researchInventoryBucket).toBe("Actual starter");
+    expect(afterPlayer.pickNowScore).toBe(beforePlayer.pickNowScore);
+  });
+
+  it("keeps the last valid research batch when a replacement has an identity error", async () => {
+    const draftKey = "research-last-known-good";
+    const stub = env.DRAFT_SESSION.getByName(draftKey);
+    await stub.initializeDraft(init(draftKey));
+    await stub.publishResearch(researchPublication(draftKey), crypto.randomUUID(), new Date().toISOString());
+    const invalid = researchPublication(draftKey, {
+      publicationId: "research-2026-08-27-2",
+      profiles: [{ ...researchPublication(draftKey).profiles[0]!, playerKey: "espn:999" }],
+    });
+    await runInDurableObject(stub, async (instance) => {
+      await expect(instance.publishResearch(invalid, crypto.randomUUID(), new Date().toISOString()))
+        .rejects.toThrow("invalid_research_player_key");
+    });
+    expect((await stub.getSnapshot()).research?.publicationId).toBe("research-2026-08-27-1");
   });
 
   it("preserves negative D/ST IDs and reports a gap without dropping picks", async () => {
@@ -438,6 +540,37 @@ describe("Worker route security", () => {
     expect((await snapshot.json<{ picks: Array<{ playerId: string }> }>()).picks).toEqual([
       expect.objectContaining({ playerId: "-16010" }),
     ]);
+  });
+
+  it("accepts a signed research publication and exposes it through the snapshot", async () => {
+    const draftKey = "route-valid-research";
+    const base = `http://worker.test/api/v1/drafts/${draftKey}`;
+    const initPath = `/api/v1/drafts/${draftKey}/initialize`;
+    const initBytes = encoder.encode(JSON.stringify(init(draftKey)));
+    expect((await SELF.fetch(`${base}/initialize`, {
+      method: "POST",
+      headers: await signedJsonHeaders(initPath, initBytes, crypto.randomUUID()),
+      body: initBytes,
+    })).status).toBe(201);
+
+    const path = `/api/v1/drafts/${draftKey}/research`;
+    const bytes = encoder.encode(JSON.stringify(researchPublication(draftKey)));
+    const response = await SELF.fetch(`http://worker.test${path}`, {
+      method: "POST",
+      headers: await signedJsonHeaders(path, bytes, crypto.randomUUID(), RESEARCH_SECRET),
+      body: bytes,
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ changed: true, profileCount: 1 });
+    const snapshot = await (await SELF.fetch(`${base}/snapshot`)).json<{
+      research: { publicationId: string };
+      available: Array<{ playerId: string; researchInventoryBucket?: string }>;
+    }>();
+    expect(snapshot.research.publicationId).toBe("research-2026-08-27-1");
+    expect(snapshot.available.find((player) => player.playerId === "101")?.researchInventoryBucket)
+      .toBe("Actual starter");
+    const readback = await (await SELF.fetch(`${base}/research`)).json<ResearchPublicationV1>();
+    expect(readback).toEqual(researchPublication(draftKey));
   });
 
   it("accepts the previous HMAC during rotation and rejects initialization nonce replay", async () => {

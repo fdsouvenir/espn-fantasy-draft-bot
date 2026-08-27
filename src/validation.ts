@@ -1,7 +1,26 @@
-import type { DraftInitV1, DraftPickEventV1, IngestBatchV1 } from "./contracts";
+import type {
+  DraftInitV1,
+  DraftPickEventV1,
+  IngestBatchV1,
+  PositionResearchFindings,
+  ResearchProfileV2,
+  ResearchPublicationV1,
+  ResearchRange,
+} from "./contracts";
+import {
+  normalizeResearchPosition,
+  ROLE_VOCABULARY_VERSION,
+  roleAllowed,
+} from "./research";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const HEX_64 = /^[a-f0-9]{64}$/;
+const RESEARCH_FIELD = /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/;
+const RESEARCH_CONFIDENCES = new Set(["high", "medium", "low", "unknown"]);
+const RESEARCH_STATES = new Set(["complete", "insufficient-evidence", "conflicting-evidence", "stale"]);
+const PUBLICATION_STATUSES = new Set(["published", "needs-review"]);
+const COMPETITION_STATUSES = new Set(["settled", "leaning", "open", "unknown"]);
+const HIGH_VALUE_ROLES = new Set(["primary", "shared", "secondary", "none", "unknown"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -25,6 +44,228 @@ function stringArray(value: unknown, maxItems: number, maxLength: number): value
 
 function validDate(value: unknown): value is string {
   return typeof value === "string" && ISO_DATE.test(value) && Number.isFinite(Date.parse(value));
+}
+
+function validResearchFindings(value: unknown): value is ResearchProfileV2["additionalFindings"] {
+  if (!isRecord(value) || Object.keys(value).length > 128) return false;
+  return Object.entries(value).every(([key, fieldValue]) => {
+    if (!RESEARCH_FIELD.test(key)) return false;
+    if (fieldValue === null || typeof fieldValue === "boolean") return true;
+    if (typeof fieldValue === "number") return finiteNumber(fieldValue, -1_000_000, 1_000_000);
+    if (typeof fieldValue === "string") return boundedString(fieldValue, 1_000);
+    return stringArray(fieldValue, 32, 160);
+  });
+}
+
+function exactKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const allowedSet = new Set(allowed);
+  return Object.keys(value).every((key) => allowedSet.has(key));
+}
+
+function validRange(value: unknown, min: number, max: number): value is ResearchRange {
+  return isRecord(value) && exactKeys(value, ["low", "high"]) &&
+    finiteNumber(value.low, min, max) && finiteNumber(value.high, min, max) && value.low <= value.high;
+}
+
+function validRank(value: unknown): boolean {
+  return value === "tied-1" || value === "unknown" || integer(value, 1, 100);
+}
+
+function optionalEnum(value: unknown, allowed: Set<string>): boolean {
+  return value === undefined || (typeof value === "string" && allowed.has(value));
+}
+
+function optionalRange(value: unknown, min: number, max: number): boolean {
+  return value === undefined || validRange(value, min, max);
+}
+
+function validStructuredFindings(value: unknown, position: string): value is PositionResearchFindings {
+  if (!isRecord(value) || value.position !== position) return false;
+  if (position === "RB") {
+    return exactKeys(value, ["position", "carryShare", "routeShare", "goalLineRole", "backfieldRank", "handcuffType", "competitionStatus"]) &&
+      optionalRange(value.carryShare, 0, 1) && optionalRange(value.routeShare, 0, 1) &&
+      optionalEnum(value.goalLineRole, HIGH_VALUE_ROLES) &&
+      (value.backfieldRank === undefined || validRank(value.backfieldRank)) &&
+      optionalEnum(value.handcuffType, new Set(["direct", "ambiguous", "none", "unknown"])) &&
+      optionalEnum(value.competitionStatus, COMPETITION_STATUSES);
+  }
+  if (position === "WR") {
+    return exactKeys(value, ["position", "teamTargetRank", "targetShare", "routeShare", "redZoneTargetRole", "competitionStatus"]) &&
+      (value.teamTargetRank === undefined || validRank(value.teamTargetRank)) &&
+      optionalRange(value.targetShare, 0, 1) && optionalRange(value.routeShare, 0, 1) &&
+      optionalEnum(value.redZoneTargetRole, HIGH_VALUE_ROLES) &&
+      optionalEnum(value.competitionStatus, COMPETITION_STATUSES);
+  }
+  if (position === "TE") {
+    return exactKeys(value, ["position", "routeShare", "targetShare", "teRoomRank", "teamTargetRank", "redZoneTargetRole", "blockingLoad"]) &&
+      optionalRange(value.routeShare, 0, 1) && optionalRange(value.targetShare, 0, 1) &&
+      (value.teRoomRank === undefined || validRank(value.teRoomRank)) &&
+      (value.teamTargetRank === undefined || validRank(value.teamTargetRank)) &&
+      optionalEnum(value.redZoneTargetRole, HIGH_VALUE_ROLES) &&
+      optionalEnum(value.blockingLoad, new Set(["heavy", "balanced", "light", "unknown"]));
+  }
+  if (position === "QB") {
+    return exactKeys(value, ["position", "week1StartProbability", "designedRushesPerGame", "passAttemptsPerGame", "starterLeash", "competitionStatus"]) &&
+      optionalRange(value.week1StartProbability, 0, 1) &&
+      optionalRange(value.designedRushesPerGame, 0, 100) && optionalRange(value.passAttemptsPerGame, 0, 100) &&
+      optionalEnum(value.starterLeash, new Set(["stable", "moderate", "fragile", "unknown"])) &&
+      optionalEnum(value.competitionStatus, COMPETITION_STATUSES);
+  }
+  if (position === "K") {
+    return exactKeys(value, ["position", "jobSecurityProbability", "offenseScoringBand", "competitionStatus"]) &&
+      optionalRange(value.jobSecurityProbability, 0, 1) &&
+      optionalEnum(value.offenseScoringBand, new Set(["strong", "average", "weak", "unknown"])) &&
+      optionalEnum(value.competitionStatus, COMPETITION_STATUSES);
+  }
+  if (position === "D/ST") {
+    return exactKeys(value, ["position", "pressurePercentile", "sackPercentile", "takeawayPercentile", "pointsPreventionPercentile", "week1MatchupPercentile"]) &&
+      ["pressurePercentile", "sackPercentile", "takeawayPercentile", "pointsPreventionPercentile", "week1MatchupPercentile"]
+        .every((field) => value[field] === undefined || finiteNumber(value[field], 0, 100));
+  }
+  return false;
+}
+
+function validResearchProfile(value: unknown): value is ResearchProfileV2 {
+  if (!isRecord(value) || value.schemaVersion !== 2 || !boundedString(value.profileId, 120)) return false;
+  const position = typeof value.position === "string" ? normalizeResearchPosition(value.position) : null;
+  if (!position || position !== value.position || !RESEARCH_STATES.has(String(value.researchState))) return false;
+  const researchedRole = value.researchedRole;
+  if (researchedRole !== null && (!boundedString(researchedRole, 80) || !roleAllowed(position, researchedRole))) return false;
+  if (value.researchState === "complete") {
+    if (value.unknownReason !== null || researchedRole === null) return false;
+  } else if (value.unknownReason !== value.researchState) {
+    return false;
+  }
+  if (value.taxonomyState !== "matched" && value.taxonomyState !== "taxonomy-gap") return false;
+  if (value.taxonomyState === "taxonomy-gap" && researchedRole !== "taxonomy-gap") return false;
+  if (value.taxonomyState === "matched" && researchedRole === "taxonomy-gap") return false;
+  if (typeof value.publicationStatus !== "string" || !PUBLICATION_STATUSES.has(value.publicationStatus)) return false;
+  if (
+    value.publicationStatus === "published" &&
+    (value.researchState !== "complete" || value.taxonomyState !== "matched" || researchedRole === null)
+  ) {
+    return false;
+  }
+  if (!boundedString(value.warRoomHeadline, 240)) {
+    return false;
+  }
+  for (const field of [
+    "currentRoleSummary",
+    "opportunitySummary",
+    "competitionSummary",
+    "availabilitySummary",
+    "draftImplication",
+    "confidenceReason",
+  ]) {
+    if (!boundedString(value[field], 2_000)) return false;
+  }
+  if (typeof value.confidence !== "string" || !RESEARCH_CONFIDENCES.has(value.confidence)) {
+    return false;
+  }
+  if (
+    !stringArray(value.alternativesConsidered, 20, 500) ||
+    !stringArray(value.unresolvedQuestions, 20, 500) ||
+    !stringArray(value.supportingObservationIds, 100, 120) ||
+    !stringArray(value.contradictingObservationIds, 100, 120) ||
+    !stringArray(value.sourceUrls, 100, 1_000) ||
+    value.sourceUrls.length === 0 ||
+    !value.sourceUrls.every((url) => url.startsWith("https://")) ||
+    !validStructuredFindings(value.structuredFindings, position) ||
+    !validResearchFindings(value.additionalFindings)
+  ) {
+    return false;
+  }
+  if (
+    !validDate(value.researchedAt) ||
+    !validDate(value.classifiedAt) ||
+    !validDate(value.expiresAt) ||
+    !boundedString(value.classifiedBy, 120)
+  ) {
+    return false;
+  }
+  if (Date.parse(value.researchedAt) > Date.parse(value.classifiedAt) || Date.parse(value.classifiedAt) >= Date.parse(value.expiresAt)) {
+    return false;
+  }
+  if (value.contingency === null) return true;
+  return (
+    isRecord(value.contingency) &&
+    exactKeys(value.contingency, ["researchedRole", "trigger", "summary"]) &&
+    (value.contingency.researchedRole === null ||
+      (boundedString(value.contingency.researchedRole, 80) && roleAllowed(position, value.contingency.researchedRole))) &&
+    boundedString(value.contingency.trigger, 1_000) &&
+    boundedString(value.contingency.summary, 2_000)
+  );
+}
+
+export function validateResearchPublication(value: unknown): ResearchPublicationV1 {
+  if (!isRecord(value) || value.schemaVersion !== 1) throw new Error("invalid_research_publication");
+  if (!boundedString(value.draftKey, 240) || !boundedString(value.publicationId, 160)) {
+    throw new Error("invalid_research_publication_identity");
+  }
+  if (value.roleVocabularyVersion !== ROLE_VOCABULARY_VERSION) {
+    throw new Error("unsupported_role_vocabulary");
+  }
+  if (value.rubricVersion !== null && !boundedString(value.rubricVersion, 80)) {
+    throw new Error("invalid_research_rubric_version");
+  }
+  if (!validDate(value.publishedAt) || !boundedString(value.publishedBy, 120)) {
+    throw new Error("invalid_research_publication_metadata");
+  }
+  const publishedAt = value.publishedAt;
+  if (!Array.isArray(value.teamSnapshots) || value.teamSnapshots.length > 32) {
+    throw new Error("invalid_research_team_snapshots");
+  }
+  const teams = new Set<string>();
+  const teamSnapshots = value.teamSnapshots.map((item) => {
+    if (!isRecord(item) || !boundedString(item.nflTeam, 8) || teams.has(item.nflTeam)) {
+      throw new Error("invalid_research_team_snapshot");
+    }
+    teams.add(item.nflTeam);
+    if (typeof item.complete !== "boolean" || !stringArray(item.coveredPlayerKeys, 100, 32)) {
+      throw new Error("invalid_research_team_snapshot");
+    }
+    if (typeof item.notes !== "string" || item.notes.length > 2_000) {
+      throw new Error("invalid_research_team_snapshot");
+    }
+    if (!item.coveredPlayerKeys.every((key) => /^espn:-?\d{1,18}$/.test(key) && key !== "espn:-1")) {
+      throw new Error("invalid_research_player_key");
+    }
+    return {
+      nflTeam: item.nflTeam,
+      complete: item.complete,
+      coveredPlayerKeys: item.coveredPlayerKeys,
+      notes: item.notes,
+    };
+  });
+  if (!Array.isArray(value.profiles) || value.profiles.length > 1_000) {
+    throw new Error("invalid_research_profiles");
+  }
+  const playerKeys = new Set<string>();
+  const profiles = value.profiles.map((item) => {
+    if (!isRecord(item) || !boundedString(item.playerKey, 32) || !/^espn:-?\d{1,18}$/.test(item.playerKey) || item.playerKey === "espn:-1") {
+      throw new Error("invalid_research_player_key");
+    }
+    if (playerKeys.has(item.playerKey)) throw new Error("duplicate_research_player_key");
+    playerKeys.add(item.playerKey);
+    if (!boundedString(item.nflTeam, 8) || !validResearchProfile(item.profile)) {
+      throw new Error("invalid_research_profile");
+    }
+    if (Date.parse(item.profile.classifiedAt) > Date.parse(publishedAt)) {
+      throw new Error("invalid_research_publication_time");
+    }
+    return { playerKey: item.playerKey, nflTeam: item.nflTeam, profile: item.profile };
+  });
+  return {
+    schemaVersion: 1,
+    draftKey: value.draftKey,
+    publicationId: value.publicationId,
+    roleVocabularyVersion: value.roleVocabularyVersion,
+    rubricVersion: value.rubricVersion,
+    publishedAt,
+    publishedBy: value.publishedBy,
+    teamSnapshots,
+    profiles,
+  };
 }
 
 export function validatePick(value: unknown): DraftPickEventV1 {
@@ -146,6 +387,9 @@ export function validateInit(value: unknown): DraftInitV1 {
     if (player.depthOrdinal !== undefined && !integer(player.depthOrdinal, 0, 20)) {
       throw new Error("invalid_catalog_player_depth_ordinal");
     }
+    if (player.researchProfile !== undefined && !validResearchProfile(player.researchProfile)) {
+      throw new Error("invalid_catalog_player_research_profile");
+    }
     catalog.push({
       playerId: player.playerId,
       name: player.name,
@@ -168,6 +412,7 @@ export function validateInit(value: unknown): DraftInitV1 {
       ...(player.injuryStatus === undefined ? {} : { injuryStatus: player.injuryStatus }),
       ...(player.depthPosition === undefined ? {} : { depthPosition: player.depthPosition }),
       ...(player.depthOrdinal === undefined ? {} : { depthOrdinal: player.depthOrdinal }),
+      ...(player.researchProfile === undefined ? {} : { researchProfile: player.researchProfile }),
     });
   }
   if (!boundedString(value.managedTeamId, 80)) throw new Error("invalid_managed_team_id");

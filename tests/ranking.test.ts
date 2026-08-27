@@ -1,17 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { rankAvailable, type RankingContext } from "../src/ranking";
 import type { CatalogPlayerV1, DraftPickEventV1 } from "../src/contracts";
+import { type RankingContext, rankAvailable } from "../src/ranking";
 
-type EditorialPlayer = CatalogPlayerV1 & {
-  editorialWorkload?: Record<string, { low?: number; mid: number; high?: number }>;
-  editorialOpportunityEvidenceCoverage?: number;
-  targetFlag?: "target" | "neutral" | "avoid";
-  targetAdjustment?: number;
-  doNotTakeBefore?: number | null;
-  doNotPassAfter?: number | null;
-};
-
-function player(overrides: Partial<EditorialPlayer> & Pick<CatalogPlayerV1, "playerId" | "position">): EditorialPlayer {
+function player(overrides: Partial<CatalogPlayerV1> & Pick<CatalogPlayerV1, "playerId" | "position">): CatalogPlayerV1 {
   return {
     name: overrides.playerId,
     nflTeam: "CHI",
@@ -70,33 +61,50 @@ describe("rankAvailable", () => {
     expect(ranked[0]!.intrinsicScore - ranked[1]!.intrinsicScore).toBeGreaterThan(8);
   });
 
-  it("consumes compiled Sheet workload, role, tier, target, and guardrail fields", () => {
-    const compiled = player({
-      playerId: "compiled",
-      position: "RB",
-      roleClass: "lead-committee",
-      tier: "RB-A",
-      opportunityScore: 26.5,
-      editorialOpportunityEvidenceCoverage: 0.5,
-      editorialWorkload: { snap: { low: 0.4, mid: 0.5, high: 0.6 }, carry: { mid: 0.55 } },
-      targetFlag: "target",
-      targetAdjustment: 4,
-      doNotPassAfter: 24,
-    });
-    const plain = player({ playerId: "plain", position: "RB", roleClass: "RB-unlisted", tier: "RB-B", opportunityScore: 26.5 });
-    const ranked = rankAvailable([compiled, plain], [], { ...neutralContext, currentPick: 25, nextTeamPick: 25 });
-    expect(ranked[0]?.playerId).toBe("compiled");
-    expect(ranked[0]?.reasons).toContain("Reviewed Sheet target adjustment");
-    expect(ranked[0]?.reasons).toContain("Do not pass after pick 24");
-  });
-
-  it("demotes a compiled Sheet avoid flag even when its numeric adjustment is zero", () => {
+  it("transports Verl research without turning it into an implicit ranking adjustment", () => {
+    const researchProfile = {
+      schemaVersion: 2 as const,
+      profileId: "profile-wr-researched",
+      position: "WR" as const,
+      researchedRole: "clear-target-leader",
+      researchState: "complete" as const,
+      unknownReason: null,
+      taxonomyState: "matched" as const,
+      publicationStatus: "published" as const,
+      warRoomHeadline: "Clear first read despite the weak offense",
+      currentRoleSummary: "Verl classified the player as the current target leader.",
+      opportunitySummary: "Full-time routes with the first read on key downs.",
+      competitionSummary: "No teammate has matched the observed first-team usage.",
+      availabilitySummary: "Practicing in full.",
+      draftImplication: "Treat as a volume WR1 rather than an ADP duplicate.",
+      contingency: null,
+      confidence: "high" as const,
+      confidenceReason: "Multiple current primary reports agree.",
+      alternativesConsidered: [],
+      unresolvedQuestions: [],
+      supportingObservationIds: ["obs-1"],
+      contradictingObservationIds: [],
+      sourceUrls: ["https://example.com/report"],
+      structuredFindings: {
+        position: "WR" as const,
+        teamTargetRank: 1,
+        targetShare: { low: 0.21, high: 0.28 },
+        routeShare: { low: 0.78, high: 0.91 },
+      },
+      additionalFindings: { alignment: "X receiver" },
+      researchedAt: "2026-08-26T18:00:00.000Z",
+      classifiedAt: "2026-08-26T18:30:00.000Z",
+      expiresAt: "2026-08-30T18:30:00.000Z",
+      classifiedBy: "Verl",
+    };
     const ranked = rankAvailable([
-      player({ playerId: "neutral", position: "WR", targetFlag: "neutral", targetAdjustment: 0 }),
-      player({ playerId: "avoid", position: "WR", targetFlag: "avoid", targetAdjustment: 0 }),
+      player({ playerId: "plain", position: "WR" }),
+      player({ playerId: "researched", position: "WR", researchProfile }),
     ], [], { ...neutralContext, currentPick: 25, nextTeamPick: 25 });
-    expect(ranked[0]?.playerId).toBe("neutral");
-    expect(ranked.find((candidate) => candidate.playerId === "avoid")?.risks).toContain("Reviewed Sheet avoid adjustment");
+    const plain = ranked.find((candidate) => candidate.playerId === "plain")!;
+    const researched = ranked.find((candidate) => candidate.playerId === "researched")!;
+    expect(researched.pickNowScore).toBe(plain.pickNowScore);
+    expect(researched.researchProfile).toEqual(researchProfile);
   });
 
   it("uses opportunity and depth role to elevate a lesser-known starter", () => {
