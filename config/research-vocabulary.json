@@ -1,0 +1,237 @@
+{
+  "roleVocabularyVersion": "2026.2",
+  "rubricVersion": "2026.1-draft",
+  "publicationStatuses": [
+    "needs-review",
+    "published"
+  ],
+  "workflowStatuses": [
+    "working",
+    "superseded"
+  ],
+  "researchStates": [
+    "complete",
+    "insufficient-evidence",
+    "conflicting-evidence",
+    "stale"
+  ],
+  "taxonomyStates": [
+    "matched",
+    "taxonomy-gap"
+  ],
+  "offenseScoringBands": [
+    "strong",
+    "average",
+    "weak",
+    "unknown"
+  ],
+  "rolesByPosition": {
+    "QB": [
+      "locked-dual-threat",
+      "locked-mobile-starter",
+      "locked-volume-passer",
+      "locked-pocket-starter",
+      "bridge-starter",
+      "competition-favorite",
+      "open-competition",
+      "contingent-backup",
+      "reserve"
+    ],
+    "RB": [
+      "three-down-bellcow",
+      "clear-lead",
+      "early-down-lead",
+      "passing-down-specialist",
+      "goal-line-specialist",
+      "committee-1a",
+      "committee-1b",
+      "contingent-backup",
+      "reserve-change-of-pace"
+    ],
+    "WR": [
+      "clear-target-leader",
+      "co-target-leader",
+      "slot-volume",
+      "every-down-secondary",
+      "field-stretcher",
+      "red-zone-specialist",
+      "low-volume-full-time",
+      "rotational-receiver"
+    ],
+    "TE": [
+      "passing-game-focal-point",
+      "every-down-receiving-te",
+      "route-heavy-starter",
+      "committee-receiving-lead",
+      "red-zone-specialist",
+      "inline-blocking-starter",
+      "rotational-te",
+      "contingent-backup"
+    ],
+    "K": [
+      "locked-high-volume-kicker",
+      "locked-average-volume-kicker",
+      "locked-low-volume-kicker",
+      "competition-favorite",
+      "open-competition",
+      "temporary-replacement",
+      "reserve-or-unsigned"
+    ],
+    "D/ST": [
+      "every-week-disruptive-unit",
+      "pressure-upside-unit",
+      "turnover-volatile-unit",
+      "opening-schedule-streamer",
+      "week-one-streamer",
+      "matchup-only-unit",
+      "low-ceiling-unit"
+    ]
+  },
+  "sheet": {
+    "listsHeaders": [
+      "positions",
+      "nfl_teams",
+      "yes_no_unknown",
+      "source_status",
+      "evidence_types",
+      "evidence_topic",
+      "directions",
+      "materiality",
+      "review_status",
+      "dispositions",
+      "resolution_status",
+      "all_researched_roles",
+      "workflow_status",
+      "publication_status",
+      "run_status",
+      "qc_status",
+      "qb_researched_roles",
+      "rb_researched_roles",
+      "wr_researched_roles",
+      "te_researched_roles",
+      "k_researched_roles",
+      "dst_researched_roles"
+    ],
+    "positionRoleListHeaders": {
+      "QB": "qb_researched_roles",
+      "RB": "rb_researched_roles",
+      "WR": "wr_researched_roles",
+      "TE": "te_researched_roles",
+      "K": "k_researched_roles",
+      "D/ST": "dst_researched_roles"
+    },
+    "playerDirectoryHeaders": [
+      "player_key",
+      "player_name",
+      "position",
+      "nfl_team",
+      "base_tier",
+      "espn_adp",
+      "base_role",
+      "active",
+      "imported_at",
+      "notes"
+    ],
+    "teamSnapshotHeaders": [
+      "nfl_team",
+      "research_run_id",
+      "snapshot_complete",
+      "covered_player_keys",
+      "offense_scoring_band",
+      "team_context_json",
+      "coverage_notes",
+      "verified_at",
+      "verified_by"
+    ],
+    "profileCommonHeaders": [
+      "profile_id",
+      "player_key",
+      "player_name",
+      "position",
+      "nfl_team",
+      "research_run_id",
+      "evidence_cutoff_at",
+      "researched_role",
+      "research_state",
+      "taxonomy_state",
+      "workflow_status",
+      "publication_status",
+      "war_room_headline",
+      "current_role_summary",
+      "opportunity_summary",
+      "competition_summary",
+      "availability_summary",
+      "draft_implication",
+      "contingent_researched_role",
+      "contingency_trigger",
+      "contingency_summary",
+      "confidence",
+      "confidence_reason",
+      "alternatives_considered",
+      "unresolved_questions",
+      "additional_findings_json",
+      "supporting_observation_ids",
+      "contradicting_observation_ids",
+      "source_refs",
+      "researched_at",
+      "classified_at",
+      "expires_at",
+      "classified_by"
+    ],
+    "positionFindingHeaders": {
+      "QB": [
+        "week1_start_probability_low",
+        "week1_start_probability_high",
+        "designed_rushes_per_game_low",
+        "designed_rushes_per_game_high",
+        "pass_attempts_per_game_low",
+        "pass_attempts_per_game_high",
+        "starter_leash",
+        "competition_status"
+      ],
+      "RB": [
+        "carry_share_low",
+        "carry_share_high",
+        "target_share_low",
+        "target_share_high",
+        "route_share_low",
+        "route_share_high",
+        "goal_line_role",
+        "backfield_rank",
+        "handcuff_type",
+        "competition_status"
+      ],
+      "WR": [
+        "team_target_rank",
+        "target_share_low",
+        "target_share_high",
+        "route_share_low",
+        "route_share_high",
+        "red_zone_target_role",
+        "competition_status"
+      ],
+      "TE": [
+        "route_share_low",
+        "route_share_high",
+        "target_share_low",
+        "target_share_high",
+        "te_room_rank",
+        "team_target_rank",
+        "red_zone_target_role",
+        "blocking_load"
+      ],
+      "K": [
+        "job_security_probability_low",
+        "job_security_probability_high",
+        "competition_status"
+      ],
+      "D/ST": [
+        "pressure_percentile",
+        "sack_percentile",
+        "takeaway_percentile",
+        "points_prevention_percentile",
+        "week1_matchup_percentile"
+      ]
+    }
+  }
+}

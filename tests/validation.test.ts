@@ -87,10 +87,11 @@ describe("validateInit", () => {
     const researchProfile = {
       schemaVersion: 2,
       profileId: "profile-rb-101",
+      researchRunId: "run-2026-08-11",
+      evidenceCutoffAt: "2026-08-11T10:30:00.000Z",
       position: "RB",
       researchedRole: "clear-lead",
       researchState: "complete",
-      unknownReason: null,
       taxonomyState: "matched",
       publicationStatus: "published",
       warRoomHeadline: "The remaining clear lead back",
@@ -140,10 +141,11 @@ describe("validateInit", () => {
       researchProfile: {
         schemaVersion: 2,
         profileId: "profile-rb-101",
+        researchRunId: "run-2026-08-11",
+        evidenceCutoffAt: "2026-08-11T10:30:00.000Z",
         position: "RB",
         researchedRole: "clear-lead",
         researchState: "complete",
-        unknownReason: null,
         taxonomyState: "matched",
         publicationStatus: "published",
         warRoomHeadline: "Agent conclusion",
@@ -175,10 +177,11 @@ describe("validateResearchPublication", () => {
   const profile = {
     schemaVersion: 2,
     profileId: "profile-rb-101",
+    researchRunId: "run-2026-08-27",
+    evidenceCutoffAt: "2026-08-27T09:30:00.000Z",
     position: "RB",
     researchedRole: "clear-lead",
     researchState: "complete",
-    unknownReason: null,
     taxonomyState: "matched",
     publicationStatus: "published",
     warRoomHeadline: "Current backfield lead",
@@ -198,6 +201,7 @@ describe("validateResearchPublication", () => {
     structuredFindings: {
       position: "RB",
       carryShare: { low: 0.52, high: 0.64 },
+      targetShare: { low: 0.1, high: 0.16 },
       routeShare: { low: 0.34, high: 0.48 },
       goalLineRole: "primary",
       backfieldRank: 1,
@@ -213,11 +217,18 @@ describe("validateResearchPublication", () => {
     schemaVersion: 1,
     draftKey: "test",
     publicationId: "research-2026-08-27T12:00:00Z",
-    roleVocabularyVersion: "2026.1",
+    roleVocabularyVersion: "2026.2",
     rubricVersion: "2026.1-draft",
     publishedAt: "2026-08-27T12:00:00.000Z",
     publishedBy: "Verl",
-    teamSnapshots: [{ nflTeam: "CHI", complete: true, coveredPlayerKeys: ["espn:101"], notes: "" }],
+    teamSnapshots: [{
+      nflTeam: "CHI",
+      researchRunId: "run-2026-08-27",
+      complete: true,
+      coveredPlayerKeys: ["espn:101"],
+      offenseScoringBand: "average",
+      notes: "",
+    }],
     profiles: [{ playerKey: "espn:101", nflTeam: "CHI", profile }],
   };
 
@@ -258,5 +269,29 @@ describe("validateResearchPublication", () => {
         },
       }],
     })).toThrow("invalid_research_profile");
+  });
+
+  it("rejects redundant profile fields and evidence dated after research completion", () => {
+    expect(() => validateResearchPublication({
+      ...publication,
+      profiles: [{
+        ...publication.profiles[0],
+        profile: { ...profile, unknownReason: null },
+      }],
+    })).toThrow("invalid_research_profile");
+    expect(() => validateResearchPublication({
+      ...publication,
+      profiles: [{
+        ...publication.profiles[0],
+        profile: { ...profile, evidenceCutoffAt: "2026-08-27T10:30:00.000Z" },
+      }],
+    })).toThrow("invalid_research_profile");
+  });
+
+  it("rejects Sheet-only team context at the publication boundary", () => {
+    expect(() => validateResearchPublication({
+      ...publication,
+      teamSnapshots: [{ ...publication.teamSnapshots[0], teamContextJson: "{}" }],
+    })).toThrow("invalid_research_team_snapshot");
   });
 });

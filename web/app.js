@@ -104,10 +104,11 @@
     if (!raw || typeof raw !== "object") return null;
     return {
       profileId: String(raw.profileId ?? ""),
+      researchRunId: String(raw.researchRunId ?? ""),
+      evidenceCutoffAt: raw.evidenceCutoffAt ?? null,
       position: String(raw.position ?? "").toUpperCase(),
       role: raw.researchedRole ?? null,
       researchState: raw.researchState ?? "insufficient-evidence",
-      unknownReason: raw.unknownReason ?? null,
       taxonomyState: raw.taxonomyState ?? "matched",
       publicationStatus: raw.publicationStatus ?? "needs-review",
       headline: raw.warRoomHeadline ?? "No War Room headline published.",
@@ -315,7 +316,12 @@
       profile.taxonomyState === "taxonomy-gap" ||
       profile.researchState !== "complete"
     ) {
-      return { label: "Review", detail: titleCase(profile.unknownReason ?? profile.taxonomyState), className: "status-warn" };
+      const detail = profile.taxonomyState === "taxonomy-gap"
+        ? profile.taxonomyState
+        : profile.researchState !== "complete"
+          ? profile.researchState
+          : profile.publicationStatus;
+      return { label: "Review", detail: titleCase(detail), className: "status-warn" };
     }
     return {
       label: titleCase(profile.confidence),
@@ -777,10 +783,11 @@
     return {
       schemaVersion: 2,
       profileId: `sample-${position}-${role}`,
+      researchRunId: "sanitized-pilot-run-1",
+      evidenceCutoffAt: new Date(Date.now() - 9 * 3_600_000).toISOString(),
       position,
       researchedRole: role,
       researchState: "complete",
-      unknownReason: null,
       taxonomyState: "matched",
       publicationStatus: "published",
       warRoomHeadline: "Role clarity adds information ESPN rank does not show.",
@@ -815,7 +822,7 @@
     research: {
       publicationId: "sanitized-pilot-1",
       researchRevision: 1,
-      roleVocabularyVersion: "2026.1",
+      roleVocabularyVersion: "2026.2",
       rubricVersion: "2026.1-draft",
       publishedAt: new Date(Date.now() - 6 * 3_600_000).toISOString(),
       publishedBy: "Verl",
@@ -936,7 +943,6 @@
         researchProfile: mockProfile("TE", "inline-blocking-starter", {
           warRoomHeadline: "Real-life starter whose snaps overstate his fantasy routes.",
           researchState: "stale",
-          unknownReason: "stale",
           publicationStatus: "needs-review",
           confidence: "low",
           expiresAt: new Date(Date.now() - 4 * 3_600_000).toISOString(),
@@ -966,7 +972,7 @@
         pickNowRank: 150, roleClass: "K", returnProbability: 0.94, researchInventoryBucket: "Secure job",
         researchProfile: mockProfile("K", "locked-average-volume-kicker", {
           warRoomHeadline: "Secure job; still replaceable and suppressed until the endgame.",
-          structuredFindings: { position: "K", jobSecurityProbability: { low: 0.96, high: 1 }, offenseScoringBand: "strong", competitionStatus: "settled" },
+          structuredFindings: { position: "K", jobSecurityProbability: { low: 0.96, high: 1 }, competitionStatus: "settled" },
         }),
       },
       {

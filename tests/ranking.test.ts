@@ -65,10 +65,11 @@ describe("rankAvailable", () => {
     const researchProfile = {
       schemaVersion: 2 as const,
       profileId: "profile-wr-researched",
+      researchRunId: "run-2026-08-26",
+      evidenceCutoffAt: "2026-08-26T17:30:00.000Z",
       position: "WR" as const,
       researchedRole: "clear-target-leader",
       researchState: "complete" as const,
-      unknownReason: null,
       taxonomyState: "matched" as const,
       publicationStatus: "published" as const,
       warRoomHeadline: "Clear first read despite the weak offense",

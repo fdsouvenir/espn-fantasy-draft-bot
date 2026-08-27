@@ -8,70 +8,15 @@ import type {
   ResearchRange,
   TeamResearchSnapshotV1,
 } from "./contracts";
+import vocabulary from "../config/research-vocabulary.json";
 
-export const ROLE_VOCABULARY_VERSION = "2026.1";
+export const ROLE_VOCABULARY_VERSION = vocabulary.roleVocabularyVersion;
+export const RESEARCH_PUBLICATION_STATUSES = vocabulary.publicationStatuses;
 
-export const RESEARCHED_ROLES_BY_POSITION: Record<ResearchPosition, readonly string[]> = {
-  QB: [
-    "locked-dual-threat",
-    "locked-mobile-starter",
-    "locked-volume-passer",
-    "locked-pocket-starter",
-    "bridge-starter",
-    "competition-favorite",
-    "open-competition",
-    "contingent-backup",
-    "reserve",
-  ],
-  RB: [
-    "three-down-bellcow",
-    "clear-lead",
-    "early-down-lead",
-    "passing-down-specialist",
-    "goal-line-specialist",
-    "committee-1a",
-    "committee-1b",
-    "reserve-change-of-pace",
-  ],
-  WR: [
-    "clear-target-leader",
-    "co-target-leader",
-    "slot-volume",
-    "every-down-secondary",
-    "field-stretcher",
-    "red-zone-specialist",
-    "low-volume-full-time",
-    "rotational-receiver",
-  ],
-  TE: [
-    "passing-game-focal-point",
-    "every-down-receiving-te",
-    "route-heavy-starter",
-    "committee-receiving-lead",
-    "red-zone-specialist",
-    "inline-blocking-starter",
-    "rotational-te",
-    "contingent-backup",
-  ],
-  K: [
-    "locked-high-volume-kicker",
-    "locked-average-volume-kicker",
-    "locked-low-volume-kicker",
-    "competition-favorite",
-    "open-competition",
-    "temporary-replacement",
-    "reserve-or-unsigned",
-  ],
-  "D/ST": [
-    "every-week-disruptive-unit",
-    "pressure-upside-unit",
-    "turnover-volatile-unit",
-    "opening-schedule-streamer",
-    "week-one-streamer",
-    "matchup-only-unit",
-    "low-ceiling-unit",
-  ],
-};
+export const RESEARCHED_ROLES_BY_POSITION = vocabulary.rolesByPosition as Record<
+  ResearchPosition,
+  readonly string[]
+>;
 
 const INVENTORY_BUCKETS: Record<ResearchPosition, Record<string, string>> = {
   QB: {
@@ -93,7 +38,8 @@ const INVENTORY_BUCKETS: Record<ResearchPosition, Record<string, string>> = {
     "committee-1b": "Committee partner",
     "passing-down-specialist": "Specialist",
     "goal-line-specialist": "Specialist",
-    "reserve-change-of-pace": "Contingent",
+    "contingent-backup": "Contingent",
+    "reserve-change-of-pace": "Reserve",
   },
   WR: {
     "clear-target-leader": "Target leader",
@@ -207,6 +153,24 @@ function definiteRoleContradictions(publication: ResearchPublicationV1): Researc
         warnings.push(warning("role-metric-conflict", "Clear target leader conflicts with a team target rank below first.", playerKey, nflTeam));
       }
     }
+    if (findings.position === "WR" && role === "co-target-leader") {
+      const rank = findings.teamTargetRank;
+      if (typeof rank === "number" && rank > 2) {
+        warnings.push(warning("role-metric-conflict", "Co-target leader conflicts with a team target rank below second.", playerKey, nflTeam));
+      }
+    }
+    if (findings.position === "TE" && role === "passing-game-focal-point") {
+      const rank = findings.teamTargetRank;
+      if (typeof rank === "number" && rank > 2) {
+        warnings.push(warning("role-metric-conflict", "Passing-game focal point conflicts with a team target rank below second.", playerKey, nflTeam));
+      }
+    }
+    if (findings.position === "TE" && role === "committee-receiving-lead") {
+      const rank = findings.teRoomRank;
+      if (rank !== undefined && rank !== 1 && rank !== "tied-1" && rank !== "unknown") {
+        warnings.push(warning("role-metric-conflict", "Committee receiving lead conflicts with a TE-room rank below first.", playerKey, nflTeam));
+      }
+    }
     if (findings.position === "RB" && ["three-down-bellcow", "clear-lead", "early-down-lead"].includes(role ?? "")) {
       const rank = findings.backfieldRank;
       if (rank !== undefined && rank !== 1 && rank !== "tied-1" && rank !== "unknown") {
@@ -224,6 +188,22 @@ function definiteRoleContradictions(publication: ResearchPublicationV1): Researc
       if (probability && probability.high < 0.95) {
         warnings.push(warning("role-metric-conflict", "Locked kicker conflicts with a job-security range entirely below 0.95.", playerKey, nflTeam));
       }
+    }
+    if (findings.position === "D/ST" && role === "every-week-disruptive-unit") {
+      if (
+        (findings.pressurePercentile !== undefined && findings.pressurePercentile < 25) ||
+        (findings.pointsPreventionPercentile !== undefined && findings.pointsPreventionPercentile < 25)
+      ) {
+        warnings.push(warning("role-metric-conflict", "Every-week disruptive unit conflicts with bottom-quartile pressure or points prevention.", playerKey, nflTeam));
+      }
+    }
+    if (
+      findings.position === "D/ST" &&
+      role === "week-one-streamer" &&
+      findings.week1MatchupPercentile !== undefined &&
+      findings.week1MatchupPercentile < 25
+    ) {
+      warnings.push(warning("role-metric-conflict", "Week 1 streamer conflicts with a bottom-quartile Week 1 matchup.", playerKey, nflTeam));
     }
   }
   return warnings;
@@ -248,12 +228,21 @@ export function auditResearchPublication(
     const findings = entry.profile.structuredFindings;
     const requiresWholeTeam =
       (findings.position === "WR" && findings.teamTargetRank !== undefined) ||
-      (findings.position === "TE" && findings.teamTargetRank !== undefined) ||
+      (findings.position === "TE" && (findings.teamTargetRank !== undefined || findings.teRoomRank !== undefined)) ||
       (findings.position === "RB" && findings.backfieldRank !== undefined);
     if (requiresWholeTeam && !snapshots.get(entry.nflTeam)?.complete) {
       warnings.push(warning(
         "team-snapshot-incomplete",
         "A team-relative rank was published before the team snapshot was marked complete.",
+        entry.playerKey,
+        entry.nflTeam,
+      ));
+    }
+    const teamSnapshot = snapshots.get(entry.nflTeam);
+    if (teamSnapshot && teamSnapshot.researchRunId !== entry.profile.researchRunId) {
+      warnings.push(warning(
+        "research-run-mismatch",
+        "The profile and its team snapshot were produced by different research runs.",
         entry.playerKey,
         entry.nflTeam,
       ));
@@ -276,7 +265,9 @@ export function auditResearchPublication(
     }
     const targetLow = teamEntries.reduce((sum, entry) => {
       const findings = entry.findings;
-      if (findings.position === "WR" || findings.position === "TE") return sum + (rangeLow(findings.targetShare) ?? 0);
+      if (findings.position === "RB" || findings.position === "WR" || findings.position === "TE") {
+        return sum + (rangeLow(findings.targetShare) ?? 0);
+      }
       return sum;
     }, 0);
     if (targetLow > 1.001) {

@@ -17,18 +17,18 @@ Every published player has the shared profile below plus a small position-specif
 
 | Field group | Required meaning |
 | --- | --- |
-| Identity | `profileId`, `position` |
-| Conclusion | `researchedRole`, `researchState`, `unknownReason`, `taxonomyState`, `publicationStatus` |
+| Identity | `profileId`, `researchRunId`, `position` |
+| Conclusion | `researchedRole`, `researchState`, `taxonomyState`, `publicationStatus` |
 | Draft display | headline plus current-role, opportunity, competition, availability, and draft-implication summaries |
 | Contingency | a distinct future `researchedRole`, named trigger, and summary; never blended into the present role |
 | Judgment | confidence and reason, alternatives considered, unresolved questions |
 | Evidence | supporting/contradicting observation IDs and direct HTTPS source URLs |
 | Findings | the position's structured core plus open-ended `additionalFindings` |
-| Freshness | researched, classified, and expiration times plus `classifiedBy` |
+| Freshness | evidence cutoff, researched, classified, and expiration times plus `classifiedBy` |
 
 No row means **unresearched**. A row that could not reach a definitive answer uses one of these
-research states: `insufficient-evidence`, `conflicting-evidence`, or `stale`. `unknownReason` repeats
-that state. `role-unknown` is not a role.
+research states: `insufficient-evidence`, `conflicting-evidence`, or `stale`. Put the useful
+explanation in `unresolvedQuestions`; `role-unknown` is not a role.
 
 The normal publishable state is:
 
@@ -48,10 +48,10 @@ Ranges contain only `low` and `high`; omit a range when evidence does not suppor
 | Position | Structured findings |
 | --- | --- |
 | QB | Week 1 start-probability range, designed-rush range, pass-attempt range, starter leash, competition status |
-| RB | carry-share range, route-share range, goal-line role, backfield rank, handcuff type, competition status |
+| RB | carry-share range, target-share range, route-share range, goal-line role, backfield rank, handcuff type, competition status |
 | WR | team target rank, target-share range, route-share range, red-zone role, competition status |
 | TE | route-share range, target-share range, TE-room rank, team target rank, red-zone role, blocking load |
-| K | job-security range, offense scoring band, competition status |
+| K | job-security range and competition status |
 | D/ST | pressure, sack, takeaway, points-prevention, and Week 1 matchup percentiles |
 
 Unknown or novel useful answers belong in `additionalFindings`; they do not require a new column or
@@ -59,10 +59,11 @@ application release before Verl can preserve them.
 
 ## Team closure
 
-A publication includes a `TeamResearchSnapshotV1` for each team it covers. Team-relative ranks must
-not be treated as ready before that team's snapshot is complete. A complete snapshot lists every
-covered player key. This allows Draftside to warn about missing profiles and impossible team-level
-share floors without reclassifying anyone.
+A publication includes a `TeamResearchSnapshotV1` for each team it covers. It carries the research
+run ID and team-level offense scoring band. Team-relative ranks must not be treated as ready before
+that team's snapshot is complete. A complete snapshot lists every covered player key. This allows
+Draftside to warn about missing profiles and impossible team-level share floors without
+reclassifying anyone.
 
 ## Atomic publication
 
@@ -70,7 +71,7 @@ Verl builds one `ResearchPublicationV1` JSON object:
 
 - publication schema `1`;
 - profile schema `2`;
-- role vocabulary `2026.1`;
+- role vocabulary `2026.2`;
 - rubric `2026.1-draft` (or `null`);
 - publication identity, author, and timestamp;
 - team snapshots; and
@@ -89,6 +90,15 @@ Worker verifies a research-specific HMAC, validates the whole batch, matches pro
 ESPN catalog, and commits all or none. A failed batch preserves the last valid publication. An
 identical replay is idempotent; reusing a publication ID with different content is a conflict.
 
-Warnings can flag staleness, incomplete team closure, taxonomy gaps, needs-review rows, impossible
-identity, invalid bounds, overallocated share floors, or a definite role/metric contradiction.
+Invalid identity, unknown fields, invalid bounds, and malformed timestamps reject the whole batch.
+Warnings can flag staleness, incomplete team closure, taxonomy gaps, needs-review rows,
+overallocated share floors, research-run mismatches, or a definite role/metric contradiction.
 Warnings never rewrite Verl's answer.
+
+## Sheet-only workflow fields
+
+The Sheet separates `workflow_status` (`working`, `superseded`) from deployable
+`publication_status` (`needs-review`, `published`). Verl excludes working and superseded rows from
+the publication object. Profile `player_name`, Team Snapshot `team_context_json`, and verification
+metadata are research conveniences and never enter the runtime contract. The read-only Sheet
+contract check rejects header or vocabulary drift before publication.

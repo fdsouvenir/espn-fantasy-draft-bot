@@ -28,10 +28,11 @@ function profile(overrides: Partial<ResearchProfileV2> = {}): ResearchProfileV2 
   return {
     schemaVersion: 2,
     profileId: "profile-rb-101",
+    researchRunId: "run-2026-08-27",
+    evidenceCutoffAt: "2026-08-27T09:30:00.000Z",
     position: "RB",
     researchedRole: "clear-lead",
     researchState: "complete",
-    unknownReason: null,
     taxonomyState: "matched",
     publicationStatus: "published",
     warRoomHeadline: "Current lead back",
@@ -67,11 +68,18 @@ function publication(playerProfile = profile()): ResearchPublicationV1 {
     schemaVersion: 1,
     draftKey: "draft",
     publicationId: "publication-1",
-    roleVocabularyVersion: "2026.1",
+    roleVocabularyVersion: "2026.2",
     rubricVersion: "2026.1-draft",
     publishedAt: "2026-08-27T12:00:00.000Z",
     publishedBy: "Verl",
-    teamSnapshots: [{ nflTeam: "CHI", complete: true, coveredPlayerKeys: ["espn:101"], notes: "" }],
+    teamSnapshots: [{
+      nflTeam: "CHI",
+      researchRunId: "run-2026-08-27",
+      complete: true,
+      coveredPlayerKeys: ["espn:101"],
+      offenseScoringBand: "average",
+      notes: "",
+    }],
     profiles: [{ playerKey: "espn:101", nflTeam: "CHI", profile: playerProfile }],
   };
 }
@@ -101,6 +109,84 @@ describe("research presentation and audit", () => {
       "team-snapshot-incomplete",
     ]));
     expect(batch.profiles[0]?.profile.researchedRole).toBe("clear-lead");
+  });
+
+  it("audits receiving-back targets and TE-room closure as whole-team claims", () => {
+    const batch = publication(profile({
+      position: "RB",
+      structuredFindings: {
+        position: "RB",
+        targetShare: { low: 0.6, high: 0.7 },
+      },
+    }));
+    batch.profiles.push({
+      playerKey: "espn:102",
+      nflTeam: "CHI",
+      profile: profile({
+        profileId: "profile-te-102",
+        position: "TE",
+        researchedRole: "committee-receiving-lead",
+        structuredFindings: {
+          position: "TE",
+          targetShare: { low: 0.5, high: 0.6 },
+          teRoomRank: 2,
+        },
+      }),
+    });
+    batch.teamSnapshots[0]!.complete = false;
+    const warnings = auditResearchPublication(batch, [
+      catalogPlayer(),
+      catalogPlayer({ playerId: "102", name: "Tight End", position: "TE" }),
+    ]);
+    expect(warnings.map((item) => item.code)).toEqual(expect.arrayContaining([
+      "target-share-overallocated",
+      "team-snapshot-incomplete",
+      "role-metric-conflict",
+    ]));
+  });
+
+  it("distinguishes contingent RBs from reserve change-of-pace players", () => {
+    expect(researchInventoryBucket("RB", "contingent-backup")).toBe("Contingent");
+    expect(researchInventoryBucket("RB", "reserve-change-of-pace")).toBe("Reserve");
+  });
+
+  it.each([
+    {
+      position: "WR",
+      role: "co-target-leader",
+      findings: { position: "WR", teamTargetRank: 6 },
+    },
+    {
+      position: "TE",
+      role: "passing-game-focal-point",
+      findings: { position: "TE", teamTargetRank: 4 },
+    },
+    {
+      position: "D/ST",
+      role: "every-week-disruptive-unit",
+      findings: { position: "D/ST", pressurePercentile: 5, pointsPreventionPercentile: 60 },
+    },
+  ])("warns when $position role language contradicts its structured findings", ({
+    position,
+    role,
+    findings,
+  }) => {
+    const playerProfile = profile({
+      position: position as ResearchProfileV2["position"],
+      researchedRole: role,
+      structuredFindings: findings as ResearchProfileV2["structuredFindings"],
+    });
+    const warnings = auditResearchPublication(
+      publication(playerProfile),
+      [catalogPlayer({ position })],
+    );
+    expect(warnings.map((item) => item.code)).toContain("role-metric-conflict");
+  });
+
+  it("warns when a profile and Team Snapshot come from different research runs", () => {
+    const batch = publication(profile({ researchRunId: "run-other" }));
+    expect(auditResearchPublication(batch, [catalogPlayer()]).map((item) => item.code))
+      .toContain("research-run-mismatch");
   });
 
   it("rejects identity mismatches instead of attaching research to the wrong player", () => {

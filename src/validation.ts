@@ -2,6 +2,7 @@ import type {
   DraftInitV1,
   DraftPickEventV1,
   IngestBatchV1,
+  OffenseScoringBand,
   PositionResearchFindings,
   ResearchProfileV2,
   ResearchPublicationV1,
@@ -9,6 +10,7 @@ import type {
 } from "./contracts";
 import {
   normalizeResearchPosition,
+  RESEARCH_PUBLICATION_STATUSES,
   ROLE_VOCABULARY_VERSION,
   roleAllowed,
 } from "./research";
@@ -18,9 +20,41 @@ const HEX_64 = /^[a-f0-9]{64}$/;
 const RESEARCH_FIELD = /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/;
 const RESEARCH_CONFIDENCES = new Set(["high", "medium", "low", "unknown"]);
 const RESEARCH_STATES = new Set(["complete", "insufficient-evidence", "conflicting-evidence", "stale"]);
-const PUBLICATION_STATUSES = new Set(["published", "needs-review"]);
+const PUBLICATION_STATUSES = new Set(RESEARCH_PUBLICATION_STATUSES);
 const COMPETITION_STATUSES = new Set(["settled", "leaning", "open", "unknown"]);
 const HIGH_VALUE_ROLES = new Set(["primary", "shared", "secondary", "none", "unknown"]);
+const OFFENSE_SCORING_BANDS = new Set(["strong", "average", "weak", "unknown"]);
+const RESEARCH_PROFILE_KEYS = [
+  "schemaVersion",
+  "profileId",
+  "researchRunId",
+  "evidenceCutoffAt",
+  "position",
+  "researchedRole",
+  "researchState",
+  "taxonomyState",
+  "publicationStatus",
+  "warRoomHeadline",
+  "currentRoleSummary",
+  "opportunitySummary",
+  "competitionSummary",
+  "availabilitySummary",
+  "draftImplication",
+  "contingency",
+  "confidence",
+  "confidenceReason",
+  "alternativesConsidered",
+  "unresolvedQuestions",
+  "supportingObservationIds",
+  "contradictingObservationIds",
+  "sourceUrls",
+  "structuredFindings",
+  "additionalFindings",
+  "researchedAt",
+  "classifiedAt",
+  "expiresAt",
+  "classifiedBy",
+] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -79,11 +113,16 @@ function optionalRange(value: unknown, min: number, max: number): boolean {
   return value === undefined || validRange(value, min, max);
 }
 
+function validOffenseScoringBand(value: unknown): value is OffenseScoringBand {
+  return typeof value === "string" && OFFENSE_SCORING_BANDS.has(value);
+}
+
 function validStructuredFindings(value: unknown, position: string): value is PositionResearchFindings {
   if (!isRecord(value) || value.position !== position) return false;
   if (position === "RB") {
-    return exactKeys(value, ["position", "carryShare", "routeShare", "goalLineRole", "backfieldRank", "handcuffType", "competitionStatus"]) &&
-      optionalRange(value.carryShare, 0, 1) && optionalRange(value.routeShare, 0, 1) &&
+    return exactKeys(value, ["position", "carryShare", "targetShare", "routeShare", "goalLineRole", "backfieldRank", "handcuffType", "competitionStatus"]) &&
+      optionalRange(value.carryShare, 0, 1) && optionalRange(value.targetShare, 0, 1) &&
+      optionalRange(value.routeShare, 0, 1) &&
       optionalEnum(value.goalLineRole, HIGH_VALUE_ROLES) &&
       (value.backfieldRank === undefined || validRank(value.backfieldRank)) &&
       optionalEnum(value.handcuffType, new Set(["direct", "ambiguous", "none", "unknown"])) &&
@@ -112,9 +151,8 @@ function validStructuredFindings(value: unknown, position: string): value is Pos
       optionalEnum(value.competitionStatus, COMPETITION_STATUSES);
   }
   if (position === "K") {
-    return exactKeys(value, ["position", "jobSecurityProbability", "offenseScoringBand", "competitionStatus"]) &&
+    return exactKeys(value, ["position", "jobSecurityProbability", "competitionStatus"]) &&
       optionalRange(value.jobSecurityProbability, 0, 1) &&
-      optionalEnum(value.offenseScoringBand, new Set(["strong", "average", "weak", "unknown"])) &&
       optionalEnum(value.competitionStatus, COMPETITION_STATUSES);
   }
   if (position === "D/ST") {
@@ -126,16 +164,21 @@ function validStructuredFindings(value: unknown, position: string): value is Pos
 }
 
 function validResearchProfile(value: unknown): value is ResearchProfileV2 {
-  if (!isRecord(value) || value.schemaVersion !== 2 || !boundedString(value.profileId, 120)) return false;
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, RESEARCH_PROFILE_KEYS) ||
+    value.schemaVersion !== 2 ||
+    !boundedString(value.profileId, 120) ||
+    !boundedString(value.researchRunId, 160) ||
+    !validDate(value.evidenceCutoffAt)
+  ) {
+    return false;
+  }
   const position = typeof value.position === "string" ? normalizeResearchPosition(value.position) : null;
   if (!position || position !== value.position || !RESEARCH_STATES.has(String(value.researchState))) return false;
   const researchedRole = value.researchedRole;
   if (researchedRole !== null && (!boundedString(researchedRole, 80) || !roleAllowed(position, researchedRole))) return false;
-  if (value.researchState === "complete") {
-    if (value.unknownReason !== null || researchedRole === null) return false;
-  } else if (value.unknownReason !== value.researchState) {
-    return false;
-  }
+  if (value.researchState === "complete" && researchedRole === null) return false;
   if (value.taxonomyState !== "matched" && value.taxonomyState !== "taxonomy-gap") return false;
   if (value.taxonomyState === "taxonomy-gap" && researchedRole !== "taxonomy-gap") return false;
   if (value.taxonomyState === "matched" && researchedRole === "taxonomy-gap") return false;
@@ -183,7 +226,11 @@ function validResearchProfile(value: unknown): value is ResearchProfileV2 {
   ) {
     return false;
   }
-  if (Date.parse(value.researchedAt) > Date.parse(value.classifiedAt) || Date.parse(value.classifiedAt) >= Date.parse(value.expiresAt)) {
+  if (
+    Date.parse(value.evidenceCutoffAt) > Date.parse(value.researchedAt) ||
+    Date.parse(value.researchedAt) > Date.parse(value.classifiedAt) ||
+    Date.parse(value.classifiedAt) >= Date.parse(value.expiresAt)
+  ) {
     return false;
   }
   if (value.contingency === null) return true;
@@ -217,7 +264,13 @@ export function validateResearchPublication(value: unknown): ResearchPublication
   }
   const teams = new Set<string>();
   const teamSnapshots = value.teamSnapshots.map((item) => {
-    if (!isRecord(item) || !boundedString(item.nflTeam, 8) || teams.has(item.nflTeam)) {
+    if (
+      !isRecord(item) ||
+      !exactKeys(item, ["nflTeam", "researchRunId", "complete", "coveredPlayerKeys", "offenseScoringBand", "notes"]) ||
+      !boundedString(item.nflTeam, 8) ||
+      !boundedString(item.researchRunId, 160) ||
+      teams.has(item.nflTeam)
+    ) {
       throw new Error("invalid_research_team_snapshot");
     }
     teams.add(item.nflTeam);
@@ -227,13 +280,18 @@ export function validateResearchPublication(value: unknown): ResearchPublication
     if (typeof item.notes !== "string" || item.notes.length > 2_000) {
       throw new Error("invalid_research_team_snapshot");
     }
+    if (!validOffenseScoringBand(item.offenseScoringBand)) {
+      throw new Error("invalid_research_team_snapshot");
+    }
     if (!item.coveredPlayerKeys.every((key) => /^espn:-?\d{1,18}$/.test(key) && key !== "espn:-1")) {
       throw new Error("invalid_research_player_key");
     }
     return {
       nflTeam: item.nflTeam,
+      researchRunId: item.researchRunId,
       complete: item.complete,
       coveredPlayerKeys: item.coveredPlayerKeys,
+      offenseScoringBand: item.offenseScoringBand,
       notes: item.notes,
     };
   });

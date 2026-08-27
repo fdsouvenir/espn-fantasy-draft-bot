@@ -2,15 +2,17 @@
   "schemaVersion": 1,
   "draftKey": "staging:espn:2026:123456:example-draft",
   "publicationId": "verl-2026-08-27T170000Z",
-  "roleVocabularyVersion": "2026.1",
+  "roleVocabularyVersion": "2026.2",
   "rubricVersion": "2026.1-draft",
   "publishedAt": "2026-08-27T17:00:00Z",
   "publishedBy": "Verl",
   "teamSnapshots": [
     {
       "nflTeam": "ATL",
+      "researchRunId": "atl-2026-08-27-am",
       "complete": true,
       "coveredPlayerKeys": ["espn:1001"],
+      "offenseScoringBand": "strong",
       "notes": "Full fantasy-relevant ATL backfield packet reviewed."
     }
   ],
@@ -21,10 +23,11 @@
       "profile": {
         "schemaVersion": 2,
         "profileId": "atl-rb-1001-20260827",
+        "researchRunId": "atl-2026-08-27-am",
+        "evidenceCutoffAt": "2026-08-27T14:45:00Z",
         "position": "RB",
         "researchedRole": "clear-lead",
         "researchState": "complete",
-        "unknownReason": null,
         "taxonomyState": "matched",
         "publicationStatus": "published",
         "warRoomHeadline": "Clear first back with both early-down and passing-game access.",
@@ -44,6 +47,7 @@
         "structuredFindings": {
           "position": "RB",
           "carryShare": {"low": 0.52, "high": 0.66},
+          "targetShare": {"low": 0.12, "high": 0.18},
           "routeShare": {"low": 0.42, "high": 0.58},
           "goalLineRole": "primary",
           "backfieldRank": 1,

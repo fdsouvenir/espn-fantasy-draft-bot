@@ -78,10 +78,12 @@ export type ResearchPublicationStatus = "published" | "needs-review";
 export type ResearchCompetitionStatus = "settled" | "leaning" | "open" | "unknown";
 export type ResearchRank = number | "tied-1" | "unknown";
 export type ResearchRange = { low: number; high: number };
+export type OffenseScoringBand = "strong" | "average" | "weak" | "unknown";
 
 export type RbResearchFindings = {
   position: "RB";
   carryShare?: ResearchRange;
+  targetShare?: ResearchRange;
   routeShare?: ResearchRange;
   goalLineRole?: "primary" | "shared" | "secondary" | "none" | "unknown";
   backfieldRank?: ResearchRank;
@@ -120,7 +122,6 @@ export type QbResearchFindings = {
 export type KResearchFindings = {
   position: "K";
   jobSecurityProbability?: ResearchRange;
-  offenseScoringBand?: "strong" | "average" | "weak" | "unknown";
   competitionStatus?: ResearchCompetitionStatus;
 };
 
@@ -148,10 +149,11 @@ export type PositionResearchFindings =
 export type ResearchProfileV2 = {
   schemaVersion: 2;
   profileId: string;
+  researchRunId: string;
+  evidenceCutoffAt: string;
   position: ResearchPosition;
   researchedRole: string | null;
   researchState: ResearchState;
-  unknownReason: Exclude<ResearchState, "complete"> | null;
   taxonomyState: TaxonomyState;
   publicationStatus: ResearchPublicationStatus;
   warRoomHeadline: string;
@@ -182,8 +184,10 @@ export type ResearchProfileV2 = {
 
 export type TeamResearchSnapshotV1 = {
   nflTeam: string;
+  researchRunId: string;
   complete: boolean;
   coveredPlayerKeys: string[];
+  offenseScoringBand: OffenseScoringBand;
   notes: string;
 };
 

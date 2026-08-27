@@ -12,7 +12,7 @@ The repository intentionally separates shipped behavior from future work.
 - Atomic, independently signed research publication with versioned profiles, team closure,
   last-known-good retention, audit warnings, and no effect on deterministic ranking scores.
 - Live Google Sheet research database with strict shared fields, six position schemas, team
-  snapshots, role vocabulary `2026.1`, and an exception-based publication review.
+  snapshots, role vocabulary `2026.2`, and an exception-based publication review.
 - Cross-platform laptop companion that shares the user's existing draft-room session.
 
 ## Next
