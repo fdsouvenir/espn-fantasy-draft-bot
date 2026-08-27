@@ -46,7 +46,7 @@ The check invokes `gog` in read-only mode. It compares profile headers, Team Sna
 Directory headers, all research-workflow headers, role vocabulary, workflow statuses, and
 publication statuses with `config/research-vocabulary.json`. It also checks the exact Publication
 Review formulas so every profile tab is audited from row 2. A mismatch exits nonzero. It never reads
-evidence prose to make a decision and never creates publication JSON.
+evidence prose to make a decision and never classifies players.
 
 ## Three-team pilot
 
@@ -55,8 +55,8 @@ teams and set each `Research Runs.research_scope` to the case it covers. The ful
 `Publication Review` must remain `NEEDS WORK` until all 32 teams are genuinely complete. A pilot
 publication may contain only the three completed team snapshots and their covered player profiles.
 
-Keep any generated pilot publication under the ignored `artifacts/` directory. Contract checking
-is read-only, and publication remains a separate, explicit operator action after human review.
+Keep any generated rehearsal payload under the ignored `artifacts/` directory. Contract checking
+is read-only, and publication remains a separate, explicit release request after human review.
 
 `Source Registry.weighted_score` is a Sheet formula implementing the approved `2026.1` source
 rubric. Verl supplies the four evidence-backed 0–5 component scores; the Sheet performs only the
@@ -64,8 +64,9 @@ published arithmetic and does not judge source quality or player roles.
 
 ## Column ownership
 
-These profile columns are Sheet-only: `player_name` and `workflow_status`. The workflow status is
-either `working` or `superseded`; those rows do not enter publication JSON.
+These profile columns are Sheet-only: `player_name` and `workflow_status`. Use `working` while a row
+is being drafted, clear it when the current row is final, and use `superseded` for retained history.
+Deployable rows still marked `working` fail publication; superseded rows are ignored.
 
 These Team Snapshot columns are Sheet-only: `team_context_json`, `verified_at`, and `verified_by`.
 They support research review but do not enter the Worker. `coverage_notes` maps to runtime `notes`.
@@ -80,3 +81,39 @@ deliberately not accepted by the Worker.
 
 `offense_scoring_band` belongs only to Team Snapshots. RB target allocation includes receiving-back
 `target_share`; WR, TE, and RB target-share floors are audited together when the team closes.
+
+## Request publication
+
+Verl and the manual menu use the same job. Write a new request ID, UTC timestamp, and actor to
+`Publish Control`, then write `REQUESTED` to `request_state` last. The Apps Script poller changes the
+state to `RUNNING`, `SUCCEEDED`, or `FAILED` and records a bounded error without exposing secrets.
+The signing relay imports exact Sheet values and the Worker keeps its last valid snapshot on any
+failure.
+
+The one-time installation is operator-owned; it is not part of Verl's recurring work:
+
+1. Create or link a container-bound Apps Script project for the working Sheet and push
+   `apps-script/Code.js` plus `apps-script/appsscript.json` with `clasp`.
+2. Configure `DRAFTSIDE_PUBLISH_URL` and the 32-character-or-longer
+   `DRAFTSIDE_PUBLISH_TRIGGER_TOKEN` in Apps Script Properties.
+3. Configure the relay with the same trigger token, the allowed Sheet ID, the target draft key,
+   Worker base URL, and `RESEARCH_HMAC_CURRENT`. Keep the Worker HMAC out of Apps Script.
+4. Run **Draftside → Install automatic publisher** once. The installed one-minute poller handles
+   future `REQUESTED` jobs; the publish-now menu item remains an optional fallback.
+
+Installation refuses to create the timer until an HTTPS relay and trigger token exist. Apps Script
+sends the raw final ranges only. The relay performs the mechanical conversion and signs the Worker
+request.
+
+For a local rehearsal, build the raw trigger and synthetic draft identity without committing either
+artifact:
+
+```bash
+python scripts/trigger_research_publish.py \
+  --spreadsheet-id 1sOvP2Nyo6SF9L9xK0Mw0VwAt9-8egbF7fwIfPcudqKI \
+  --account fdsouvenir@gmail.com \
+  --requested-by 'Fred/manual' \
+  --payload-output artifacts/research-trigger.json \
+  --draft-init-output artifacts/research-pilot-init.json \
+  --draft-key local:research-pilot
+```

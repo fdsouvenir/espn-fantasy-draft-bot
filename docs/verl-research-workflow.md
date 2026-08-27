@@ -5,9 +5,9 @@ Status: operating contract
 ## Division of labor
 
 Verl owns source selection, evidence collection, team synthesis, role assignment, structured
-estimates, confidence, exceptions, and the publication JSON. Draftside owns ESPN identity, strict
-contract validation, atomic storage, audit warnings, and presentation. A human reviews exceptions
-that Verl marks `needs-review`.
+estimates, confidence, exceptions, final Sheet rows, and the release request. Draftside owns ESPN
+identity, mechanical Sheet import, strict contract validation, signing, atomic storage, audit
+warnings, and presentation. A human reviews exceptions that Verl marks `needs-review`.
 
 ```text
 qualified team sources
@@ -15,7 +15,8 @@ qualified team sources
   → player synthesis across the whole packet
   → team snapshot and player profiles
   → league-wide exception audit
-  → one signed atomic publication
+  → Verl requests release
+  → Draftside imports and signs one atomic publication
   → War Room filters it to players still available
 ```
 
@@ -154,8 +155,9 @@ Write the current conclusion to the matching position profile. The profile must 
 
 Use `taxonomy-gap` when no approved role fits. Use `needs-review` for a material conflict, taxonomy
 gap, or consequential uncertainty. No profile row means unresearched; never invent `role-unknown`.
-Use Sheet-local `workflow_status = working` while drafting a row and `superseded` for retained
-history. Only `publication_status = needs-review` or `published` enters publication JSON.
+Use Sheet-local `workflow_status = working` while drafting a row, clear it when the current row is
+final, and use `superseded` for retained history. Only final rows with
+`publication_status = needs-review` or `published` enter the runtime snapshot.
 
 ## Pass 4 — league audit and handoff
 
@@ -164,9 +166,10 @@ fantasy-relevant player has a profile or is explicitly named as a coverage gap. 
 `needs-review`, `taxonomy-gap`, material conflict, inaccessible source, and stale profile. Compare
 similar players across the league for consistent label use without erasing team-specific nuance.
 
-Then Verl creates a `ResearchPublicationV1` JSON object from its reviewed conclusions and invokes
-the identity-only publisher documented in `docs/verl-publication-contract.md`. The Sheet is the
-research database; it is not compiled by application logic.
+Then Verl requests publication through `Publish Control` as documented in
+`docs/verl-publication-contract.md`. Draftside mechanically imports the final Sheet cells, validates
+them, signs the resulting snapshot, and sends it atomically. The importer never supplies a missing
+answer or changes a conclusion.
 
 ## Freshness
 
@@ -178,6 +181,6 @@ research database; it is not compiled by application logic.
 Store ISO-8601 UTC timestamps and direct HTTPS URLs. A stale profile is shown as stale; software
 does not invent a replacement.
 
-Before building the publication object, run the read-only contract check documented in
+Before requesting publication, run the read-only contract check documented in
 `docs/research-sheet-operations.md`. It compares the live headers and controlled vocabulary with the
 checked-in manifest; it does not parse conclusions or classify players.

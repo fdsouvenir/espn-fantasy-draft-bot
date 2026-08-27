@@ -30,3 +30,6 @@ chrome-profile/
 .DS_Store
 .idea/
 .vscode/
+.vercel/
+.clasp.json
+.clasprc.json
