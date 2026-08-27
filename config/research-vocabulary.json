@@ -113,6 +113,10 @@
     ]
   },
   "sheet": {
+    "publicationReviewProfileRows": {
+      "start": 2,
+      "end": 1000
+    },
     "workflowTabHeaders": {
       "Source Registry": [
         "source_id",

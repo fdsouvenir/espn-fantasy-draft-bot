@@ -25,6 +25,9 @@ class ResearchSheetContractTests(unittest.TestCase):
         values = {}
         for range_name, headers in module.expected_ranges(self.manifest).items():
             values[range_name] = [list(headers)]
+        values[module.PUBLICATION_REVIEW_FORMULA_KEY] = (
+            module.expected_publication_review_formulas(self.manifest)
+        )
         lists = values["Lists!A1:V100"]
         row_count = 1 + max(
             len(self.manifest["workflowStatuses"]),
@@ -85,6 +88,14 @@ class ResearchSheetContractTests(unittest.TestCase):
         self.assertTrue(any("RB Profiles" in error for error in errors))
         self.assertTrue(any("Player Synthesis" in error for error in errors))
         self.assertTrue(any("publication_status" in error for error in errors))
+
+    def test_reports_publication_review_formula_drift(self):
+        values = self.valid_values()
+        values[module.PUBLICATION_REVIEW_FORMULA_KEY][3][0] = (
+            values[module.PUBLICATION_REVIEW_FORMULA_KEY][3][0].replace("$2", "$19")
+        )
+        errors = module.check_contract(self.manifest, values)
+        self.assertIn("Publication Review formulas differ from the manifest", errors)
 
 
 if __name__ == "__main__":

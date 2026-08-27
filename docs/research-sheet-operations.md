@@ -44,8 +44,9 @@ python scripts/check_research_sheet_contract.py \
 
 The check invokes `gog` in read-only mode. It compares profile headers, Team Snapshot and Player
 Directory headers, all research-workflow headers, role vocabulary, workflow statuses, and
-publication statuses with `config/research-vocabulary.json`. A mismatch exits nonzero. It never
-reads evidence prose to make a decision and never creates publication JSON.
+publication statuses with `config/research-vocabulary.json`. It also checks the exact Publication
+Review formulas so every profile tab is audited from row 2. A mismatch exits nonzero. It never reads
+evidence prose to make a decision and never creates publication JSON.
 
 ## Three-team pilot
 
