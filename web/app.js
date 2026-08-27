@@ -467,10 +467,15 @@
     appendInspectorSection(dom.inspector, "Competition", profile.competition);
     appendInspectorSection(dom.inspector, "Availability", profile.availability);
     if (profile.contingency) {
+      const trigger = String(profile.contingency.trigger ?? "").trim();
+      const summary = String(profile.contingency.summary ?? "").trim();
+      const contingencyCopy = trigger && summary && trigger !== summary
+        ? `${trigger}: ${summary}`
+        : trigger || summary;
       appendInspectorSection(
         dom.inspector,
         `Contingency · ${titleCase(profile.contingency.researchedRole ?? "Unresolved")}`,
-        `${profile.contingency.trigger}: ${profile.contingency.summary}`,
+        contingencyCopy,
       );
     }
     const findings = renderFindings(profile);
