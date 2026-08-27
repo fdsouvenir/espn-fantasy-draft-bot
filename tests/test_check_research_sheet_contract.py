@@ -24,7 +24,7 @@ class ResearchSheetContractTests(unittest.TestCase):
     def valid_values(self):
         values = {}
         for range_name, headers in module.expected_ranges(self.manifest).items():
-            values[range_name] = [headers]
+            values[range_name] = [list(headers)]
         lists = values["Lists!A1:V100"]
         row_count = 1 + max(
             len(self.manifest["workflowStatuses"]),
@@ -68,10 +68,12 @@ class ResearchSheetContractTests(unittest.TestCase):
     def test_reports_header_and_status_drift(self):
         values = self.valid_values()
         values["RB Profiles!A1:ZZ1"][0][-1] = "renamed"
+        values["Player Synthesis!A1:ZZ1"][0][13] = "unknown_reason"
         publication_index = self.manifest["sheet"]["listsHeaders"].index("publication_status")
         values["Lists!A1:V100"][1][publication_index] = "working"
         errors = module.check_contract(self.manifest, values)
         self.assertTrue(any("RB Profiles" in error for error in errors))
+        self.assertTrue(any("Player Synthesis" in error for error in errors))
         self.assertTrue(any("publication_status" in error for error in errors))
 
 

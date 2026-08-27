@@ -29,6 +29,10 @@ def nonblank(values: list[Any]) -> list[Any]:
 def expected_ranges(manifest: dict[str, Any]) -> dict[str, list[str]]:
     sheet = manifest["sheet"]
     ranges = {
+        **{
+            f"{tab}!A1:ZZ1": headers
+            for tab, headers in sheet["workflowTabHeaders"].items()
+        },
         "Lists!A1:V100": sheet["listsHeaders"],
         "Player Directory!A1:J1": sheet["playerDirectoryHeaders"],
         "Team Snapshots!A1:I1": sheet["teamSnapshotHeaders"],

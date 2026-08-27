@@ -43,9 +43,19 @@ python scripts/check_research_sheet_contract.py \
 ```
 
 The check invokes `gog` in read-only mode. It compares profile headers, Team Snapshot and Player
-Directory headers, role vocabulary, workflow statuses, and publication statuses with
-`config/research-vocabulary.json`. A mismatch exits nonzero. It never reads evidence prose to make
-a decision and never creates publication JSON.
+Directory headers, all research-workflow headers, role vocabulary, workflow statuses, and
+publication statuses with `config/research-vocabulary.json`. A mismatch exits nonzero. It never
+reads evidence prose to make a decision and never creates publication JSON.
+
+## Three-team pilot
+
+The pilot is scoped research, not a shortcut to a full release. Populate only the three selected
+teams and set each `Research Runs.research_scope` to the case it covers. The full-league rows in
+`Publication Review` must remain `NEEDS WORK` until all 32 teams are genuinely complete. A pilot
+publication may contain only the three completed team snapshots and their covered player profiles.
+
+Keep any generated pilot publication under the ignored `artifacts/` directory. Contract checking
+is read-only, and publication remains a separate, explicit operator action after human review.
 
 ## Column ownership
 

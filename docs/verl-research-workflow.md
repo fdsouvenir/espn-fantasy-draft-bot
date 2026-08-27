@@ -33,6 +33,19 @@ player and marks a row active when the player belongs to an NFL team rather than
 pool. `Lists` supplies the versioned vocabulary.
 Legacy Role Overrides and Legacy Tiers & Flags are history only.
 
+### Three-team pilot boundary
+
+The pilot in issue #11 exercises this workflow on three complete teams before league-wide research.
+The selected teams must collectively include an ambiguous RB room, a complete pass-catching room,
+and a QB competition or fragile-starter case. Complete every pass for those teams and leave the
+other 29 teams untouched.
+
+`Publication Review` is intentionally a full 32-team release gate, so its league-wide coverage rows
+remain `NEEDS WORK` during the pilot. Never fabricate empty research runs, snapshots, profiles, or
+coverage for unresearched teams to make those rows pass. Pilot acceptance is based on the scoped
+checks in issue #11 and a publication containing only the three complete team snapshots and their
+profiles.
+
 ## Pass 1 — collect complete team evidence
 
 For each NFL team:
@@ -59,7 +72,8 @@ projections, and contingent possibilities. Enumerate plausible roles, choose the
 explains the full packet, and state why alternatives remain or were rejected.
 
 Do not turn missing evidence into a midpoint. Use low/high only when the evidence supports a range.
-Otherwise omit the estimate and preserve the unknown in prose and `additional_findings_json`.
+Otherwise omit the estimate and preserve the unknown in `unresolved_questions` and the open-ended
+findings field. There is no separate `unknown_reason` field.
 
 The result in `Player Synthesis` must include current role reasoning, opportunity, competition,
 availability, draft implication, separate contingency, confidence, unresolved questions, all
