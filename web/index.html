@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#090d12">
-    <title>Draftside</title>
+    <title>Draftside War Room</title>
     <link rel="stylesheet" href="./styles.css">
     <script src="./app.js" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to draft board</a>
+    <a class="skip-link" href="#available-title">Skip to available players</a>
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">DS</span>
@@ -21,7 +21,7 @@
       </div>
       <div class="topbar-actions">
         <div id="clock" class="draft-clock" role="timer" aria-label="Time until the managed team picks">
-          <span class="clock-label">PICK CLOCK</span>
+          <span class="clock-label">Pick clock</span>
           <strong id="pick-clock">--:--</strong>
         </div>
         <div id="connection-pill" class="connection-pill is-loading" role="status" aria-live="polite">
@@ -31,7 +31,7 @@
       </div>
     </header>
 
-    <main id="main" tabindex="-1">
+    <main id="main">
       <section class="draft-strip" aria-labelledby="draft-progress-title">
         <div class="draft-strip-copy">
           <p class="eyebrow" id="draft-progress-title">Live draft</p>
@@ -51,43 +51,58 @@
 
       <div id="alert-region" class="alert-stack" aria-live="assertive"></div>
 
-      <section class="hero-section" aria-labelledby="recommendations-title">
-        <div class="section-heading">
+      <section class="inventory-section" aria-labelledby="inventory-title">
+        <div class="inventory-heading">
           <div>
-            <p class="eyebrow">Decision desk</p>
-            <h2 id="recommendations-title">Best three right now</h2>
+            <p class="eyebrow">Role inventory</p>
+            <h2 id="inventory-title">What is actually left?</h2>
           </div>
-          <p id="recommendation-context" class="section-note">Recommendations update with every pick.</p>
+          <div class="filter-group" role="toolbar" aria-label="Filter the War Room by position">
+            <button class="filter-button is-active" type="button" data-position="ALL" aria-pressed="true">All</button>
+            <button class="filter-button" type="button" data-position="RB" aria-pressed="false">RB</button>
+            <button class="filter-button" type="button" data-position="WR" aria-pressed="false">WR</button>
+            <button class="filter-button" type="button" data-position="TE" aria-pressed="false">TE</button>
+            <button class="filter-button" type="button" data-position="QB" aria-pressed="false">QB</button>
+            <button class="filter-button" type="button" data-position="K" aria-pressed="false">K</button>
+            <button class="filter-button" type="button" data-position="D/ST" aria-pressed="false">D/ST</button>
+          </div>
         </div>
-        <div id="recommendation-grid" class="recommendation-grid" aria-live="polite" aria-busy="true"></div>
+        <div id="inventory-list" class="inventory-list" aria-live="polite"></div>
       </section>
 
-      <div class="dashboard-grid">
-        <section class="panel board-panel" aria-labelledby="available-title">
+      <div class="war-room-grid">
+        <section class="board-panel" aria-labelledby="available-title">
           <div class="panel-heading board-heading">
             <div>
-              <p class="eyebrow">Player pool</p>
-              <h2 id="available-title">Available by tier</h2>
+              <p class="eyebrow">Available now</p>
+              <h2 id="available-title">ESPN order, Verl context</h2>
             </div>
-            <div class="filter-group" role="toolbar" aria-label="Filter available players by position">
-              <button class="filter-button is-active" type="button" data-position="ALL" aria-pressed="true">All</button>
-              <button class="filter-button" type="button" data-position="RB" aria-pressed="false">RB</button>
-              <button class="filter-button" type="button" data-position="WR" aria-pressed="false">WR</button>
-              <button class="filter-button" type="button" data-position="QB" aria-pressed="false">QB</button>
-              <button class="filter-button" type="button" data-position="TE" aria-pressed="false">TE</button>
-            </div>
+            <p id="research-coverage" class="section-note">Waiting for research publication.</p>
           </div>
           <section class="table-scroll" aria-label="Scrollable available players table">
             <table>
-              <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Tier</th><th scope="col">Role</th><th scope="col">ADP</th><th scope="col">Value</th></tr></thead>
+              <thead>
+                <tr>
+                  <th scope="col">ADP</th>
+                  <th scope="col">Player</th>
+                  <th scope="col">Researched role</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
               <tbody id="available-body"></tbody>
             </table>
           </section>
-          <p id="available-empty" class="empty-state" hidden>No available players match this filter.</p>
+          <p id="available-empty" class="empty-state" hidden>No available players match this lens.</p>
         </section>
 
-        <aside class="side-stack" aria-label="Managed team context">
-          <section class="panel roster-panel" aria-labelledby="roster-title">
+        <aside class="context-rail" aria-label="Decision and roster context">
+          <section id="research-inspector" class="research-inspector" aria-labelledby="inspector-title" aria-live="polite">
+            <p class="eyebrow">Research brief</p>
+            <h2 id="inspector-title">Select a player</h2>
+            <p class="empty-copy">Choose an available player to see Verl’s conclusion and evidence.</p>
+          </section>
+
+          <section class="roster-panel" aria-labelledby="roster-title">
             <div class="panel-heading">
               <div><p class="eyebrow">Your team</p><h2 id="roster-title">Roster &amp; needs</h2></div>
               <span id="roster-count" class="count-badge">0</span>
@@ -96,14 +111,14 @@
             <ol id="roster-list" class="roster-list"></ol>
           </section>
 
-          <section class="panel return-panel" aria-labelledby="return-title">
+          <section class="return-panel" aria-labelledby="return-title">
             <div class="panel-heading">
-              <div><p class="eyebrow">Next turn · 256 simulations</p><h2 id="return-title">Experimental return estimate</h2></div>
+              <div><p class="eyebrow">Next turn · 256 simulations</p><h2 id="return-title">Wait risk</h2></div>
             </div>
             <ul id="return-list" class="return-list"></ul>
           </section>
 
-          <section class="panel companion-panel" aria-labelledby="companion-title">
+          <section class="companion-panel" aria-labelledby="companion-title">
             <div class="panel-heading">
               <div><p class="eyebrow">Draft laptop</p><h2 id="companion-title">Companion</h2></div>
               <span id="companion-status" class="count-badge">Checking</span>
@@ -113,28 +128,14 @@
             </div>
           </section>
         </aside>
-
-        <section class="panel rb-panel" aria-labelledby="rb-title">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Opportunity, not name value</p>
-              <h2 id="rb-title">RB opportunity board</h2>
-            </div>
-            <p class="section-note">Depth-chart opportunity signal</p>
-          </div>
-          <div id="rb-board" class="rb-board"></div>
-        </section>
       </div>
     </main>
 
     <footer>
       <span id="build-label">Local preview</span>
       <span id="revision-label">Revision —</span>
+      <span id="research-label">Research not published</span>
       <span id="mode-label"></span>
     </footer>
-
-    <template id="recommendation-skeleton">
-      <article class="recommendation-card skeleton-card"><span></span><span></span><span></span><span></span></article>
-    </template>
   </body>
 </html>
