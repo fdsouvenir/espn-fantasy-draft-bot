@@ -217,7 +217,7 @@ describe("validateResearchPublication", () => {
     schemaVersion: 1,
     draftKey: "test",
     publicationId: "research-2026-08-27T12:00:00Z",
-    roleVocabularyVersion: "2026.2",
+    roleVocabularyVersion: "2026.3",
     rubricVersion: "2026.1-draft",
     publishedAt: "2026-08-27T12:00:00.000Z",
     publishedBy: "Verl",

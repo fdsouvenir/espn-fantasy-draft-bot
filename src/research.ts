@@ -38,6 +38,7 @@ const INVENTORY_BUCKETS: Record<ResearchPosition, Record<string, string>> = {
     "committee-1b": "Committee partner",
     "passing-down-specialist": "Specialist",
     "goal-line-specialist": "Specialist",
+    "blocking-fullback-specialist": "Reserve",
     "contingent-backup": "Contingent",
     "reserve-change-of-pace": "Reserve",
   },

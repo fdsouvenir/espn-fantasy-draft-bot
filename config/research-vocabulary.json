@@ -1,5 +1,5 @@
 {
-  "roleVocabularyVersion": "2026.2",
+  "roleVocabularyVersion": "2026.3",
   "rubricVersion": "2026.1-draft",
   "publicationStatuses": [
     "needs-review",
@@ -68,6 +68,7 @@
       "early-down-lead",
       "passing-down-specialist",
       "goal-line-specialist",
+      "blocking-fullback-specialist",
       "committee-1a",
       "committee-1b",
       "contingent-backup",

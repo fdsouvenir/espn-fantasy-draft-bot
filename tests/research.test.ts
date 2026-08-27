@@ -68,7 +68,7 @@ function publication(playerProfile = profile()): ResearchPublicationV1 {
     schemaVersion: 1,
     draftKey: "draft",
     publicationId: "publication-1",
-    roleVocabularyVersion: "2026.2",
+    roleVocabularyVersion: "2026.3",
     rubricVersion: "2026.1-draft",
     publishedAt: "2026-08-27T12:00:00.000Z",
     publishedBy: "Verl",
@@ -148,6 +148,7 @@ describe("research presentation and audit", () => {
   it("distinguishes contingent RBs from reserve change-of-pace players", () => {
     expect(researchInventoryBucket("RB", "contingent-backup")).toBe("Contingent");
     expect(researchInventoryBucket("RB", "reserve-change-of-pace")).toBe("Reserve");
+    expect(researchInventoryBucket("RB", "blocking-fullback-specialist")).toBe("Reserve");
   });
 
   it.each([

@@ -71,7 +71,7 @@ Verl builds one `ResearchPublicationV1` JSON object:
 
 - publication schema `1`;
 - profile schema `2`;
-- role vocabulary `2026.2`;
+- role vocabulary `2026.3`;
 - rubric `2026.1-draft` (or `null`);
 - publication identity, author, and timestamp;
 - team snapshots; and

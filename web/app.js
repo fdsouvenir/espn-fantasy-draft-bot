@@ -822,7 +822,7 @@
     research: {
       publicationId: "sanitized-pilot-1",
       researchRevision: 1,
-      roleVocabularyVersion: "2026.2",
+      roleVocabularyVersion: "2026.3",
       rubricVersion: "2026.1-draft",
       publishedAt: new Date(Date.now() - 6 * 3_600_000).toISOString(),
       publishedBy: "Verl",
