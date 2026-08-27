@@ -7,8 +7,12 @@ The repository intentionally separates shipped behavior from future work.
 - Read-only draft-room frame observation through local Chrome DevTools Protocol.
 - Signed, idempotent ingestion into a SQLite-backed Durable Object.
 - Gap, duplicate, conflict, reconnect, and stale-ingestor handling.
-- Responsive dashboard with deterministic recommendations and explicit health state.
-- Frozen catalog and reviewed editorial-release tooling.
+- Half-screen War Room organized around Verl-authored role inventory, ESPN-order availability, and
+  a focused evidence inspector.
+- Atomic, independently signed research publication with versioned profiles, team closure,
+  last-known-good retention, audit warnings, and no effect on deterministic ranking scores.
+- Live Google Sheet research database with strict shared fields, six position schemas, team
+  snapshots, role vocabulary `2026.1`, and an exception-based publication review.
 - Cross-platform laptop companion that shares the user's existing draft-room session.
 
 ## Next

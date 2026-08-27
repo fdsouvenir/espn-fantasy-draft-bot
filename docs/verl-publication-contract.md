@@ -1,0 +1,94 @@
+# Verl Player Research Publication Contract
+
+Status: implemented shared contract
+
+## Ownership
+
+Verl publishes conclusions. Draftside validates identity and shape, stores one atomic publication,
+emits non-authoritative warnings, and presents the result. Software never derives a role from Sheet
+cells, changes Verl's role, manufactures a midpoint, or feeds research into `pickNowScore`.
+
+`player_key` is `espn:<signed integer>`. The exact `espn:-1` ESPN sentinel is invalid; legitimate
+signed D/ST IDs remain valid.
+
+## Research profile v2
+
+Every published player has the shared profile below plus a small position-specific findings object.
+
+| Field group | Required meaning |
+| --- | --- |
+| Identity | `profileId`, `position` |
+| Conclusion | `researchedRole`, `researchState`, `unknownReason`, `taxonomyState`, `publicationStatus` |
+| Draft display | headline plus current-role, opportunity, competition, availability, and draft-implication summaries |
+| Contingency | a distinct future `researchedRole`, named trigger, and summary; never blended into the present role |
+| Judgment | confidence and reason, alternatives considered, unresolved questions |
+| Evidence | supporting/contradicting observation IDs and direct HTTPS source URLs |
+| Findings | the position's structured core plus open-ended `additionalFindings` |
+| Freshness | researched, classified, and expiration times plus `classifiedBy` |
+
+No row means **unresearched**. A row that could not reach a definitive answer uses one of these
+research states: `insufficient-evidence`, `conflicting-evidence`, or `stale`. `unknownReason` repeats
+that state. `role-unknown` is not a role.
+
+The normal publishable state is:
+
+- `researchState = complete`;
+- `taxonomyState = matched`;
+- a valid position role; and
+- `publicationStatus = published`.
+
+An uncertain or exceptional conclusion uses `publicationStatus = needs-review`. When evidence
+supports a role the vocabulary cannot express, use `researchedRole = taxonomy-gap` and
+`taxonomyState = taxonomy-gap`; explain the proposed concept in the prose and additional findings.
+
+## Minimal structured core
+
+Ranges contain only `low` and `high`; omit a range when evidence does not support one.
+
+| Position | Structured findings |
+| --- | --- |
+| QB | Week 1 start-probability range, designed-rush range, pass-attempt range, starter leash, competition status |
+| RB | carry-share range, route-share range, goal-line role, backfield rank, handcuff type, competition status |
+| WR | team target rank, target-share range, route-share range, red-zone role, competition status |
+| TE | route-share range, target-share range, TE-room rank, team target rank, red-zone role, blocking load |
+| K | job-security range, offense scoring band, competition status |
+| D/ST | pressure, sack, takeaway, points-prevention, and Week 1 matchup percentiles |
+
+Unknown or novel useful answers belong in `additionalFindings`; they do not require a new column or
+application release before Verl can preserve them.
+
+## Team closure
+
+A publication includes a `TeamResearchSnapshotV1` for each team it covers. Team-relative ranks must
+not be treated as ready before that team's snapshot is complete. A complete snapshot lists every
+covered player key. This allows Draftside to warn about missing profiles and impossible team-level
+share floors without reclassifying anyone.
+
+## Atomic publication
+
+Verl builds one `ResearchPublicationV1` JSON object:
+
+- publication schema `1`;
+- profile schema `2`;
+- role vocabulary `2026.1`;
+- rubric `2026.1-draft` (or `null`);
+- publication identity, author, and timestamp;
+- team snapshots; and
+- one unique profile per ESPN player key.
+
+Publish with:
+
+```bash
+RESEARCH_HMAC_CURRENT='<secret>' python scripts/publish_research.py \
+  --publication research-publication.json \
+  --worker-base https://draftside.example
+```
+
+The publisher transports Verl-authored JSON; it does not parse the Sheet or classify players. The
+Worker verifies a research-specific HMAC, validates the whole batch, matches profiles to the pinned
+ESPN catalog, and commits all or none. A failed batch preserves the last valid publication. An
+identical replay is idempotent; reusing a publication ID with different content is a conflict.
+
+Warnings can flag staleness, incomplete team closure, taxonomy gaps, needs-review rows, impossible
+identity, invalid bounds, overallocated share floors, or a definite role/metric contradiction.
+Warnings never rewrite Verl's answer.

@@ -28,6 +28,13 @@ Local ESPN ingestor
   -> SQLite transaction: nonce + events + derived state
   -> WebSocket broadcast after commit
 
+Verl research publisher
+  -> Access service-token check
+  -> independent research HMAC + whole-publication validation
+  -> catalog identity and non-authoritative audit
+  -> atomic research publication commit
+  -> WebSocket research.updated after commit
+
 Access-authenticated browser
   -> Worker API or static assets
   -> DraftSession snapshot/health RPC
@@ -74,6 +81,8 @@ Use typed RPC for state operations (compatibility date newer than 2024-04-03):
 - `recordManualPick(command, actor): IngestAck`
 - `getSnapshot(): DraftSnapshot`
 - `getHealth(): DraftHealth`
+- `publishResearch(publication, verifiedNonce, receivedAt): ResearchPublicationAckV1`
+- `getResearchPublication(): ResearchPublicationV1 | null`
 
 Use the DO `fetch()` handler only for the WebSocket upgrade because the Hibernation API is request/response based. The outer Worker authenticates and validates the request before forwarding it. The DO is never directly exposed by a public route.
 
@@ -91,8 +100,10 @@ Minimum tables:
 - `seen_nonces(nonce PRIMARY KEY, seen_at)`
 - `catalog_players(player_id PRIMARY KEY, position, nfl_team, bye_week, tier, adp, ranking_payload_json)`
 - `manual_audit(command_id PRIMARY KEY, actor_id, action, created_at, payload_hash)`
+- `research_publication(singleton PRIMARY KEY, publication_id UNIQUE, fingerprint, revision, publication_json, warnings_json)`
+- `research_profiles(player_key PRIMARY KEY, publication_id, nfl_team, profile_json)`
 
-The exact ranking payload can evolve behind a versioned schema, but the pinned snapshot version cannot change during a live draft. Store only fields required by the deterministic ranking engine; do not copy arbitrary Sheet cells.
+The exact draft payload can evolve behind a versioned schema, but the pinned snapshot version cannot change during a live draft. Store only the ESPN catalog fields and bounded Verl-published research profiles required by the War Room; do not copy arbitrary Sheet cells.
 
 Within `ingestBatch`, use synchronous DO SQLite statements without an `await` between related writes:
 
@@ -193,6 +204,8 @@ All routes are under the Access-protected staging hostname. Responses use `Cache
 - `GET /api/v1/drafts/:draftKey/health` — last ingest time, last overall pick, missing picks, duplicate/conflict counters, revision, build version, and connection count.
 - `GET /api/v1/drafts/:draftKey/ws` — authenticated WebSocket upgrade forwarded to the named DO.
 - `POST /api/v1/drafts/:draftKey/ingest` — Access service token plus valid HMAC; accepts `IngestBatchV1`.
+- `GET /api/v1/drafts/:draftKey/research` — last valid research publication for the draft.
+- `POST /api/v1/drafts/:draftKey/research` — Access service token plus the research-specific HMAC; atomically publishes `ResearchPublicationV1`.
 - `POST /api/v1/drafts/:draftKey/manual-picks` — interactive Access user only; audited manual fallback command. Do not expose this until actor identity is reliably available and tested.
 - `POST /api/v1/catalog-snapshots` — deferred D1-backed admin import; interactive Access admin only, immutable version creation.
 
@@ -237,6 +250,10 @@ Verify against the raw bounded body bytes before JSON parsing. Require a timesta
 
 Key rotation uses two secret bindings temporarily (`INGEST_HMAC_CURRENT` and `INGEST_HMAC_PREVIOUS`) and an explicit key ID header. Stop accepting the previous key after the ingestor has switched. Never log signatures, Access headers, HMAC material, cookies, or raw request bodies.
 
+Research publication uses the same canonical signing format but a distinct
+`RESEARCH_HMAC_CURRENT` secret (and optional `RESEARCH_HMAC_PREVIOUS` during rotation). A research
+credential cannot submit draft picks, and an ingest credential cannot publish research.
+
 Access authentication without HMAC is insufficient because a leaked service token could submit arbitrary picks. HMAC without Access would leave the public endpoint exposed to unauthenticated load. Both are proportionate for private staging and operationally simple.
 
 ## D1 and R2 decision
@@ -249,7 +266,7 @@ D1 becomes useful for immutable, versioned shared data:
 - `players(snapshot_version, player_id, name, position, nfl_team, bye_week, ...)`
 - `rank_inputs(snapshot_version, player_id, tier, role, workload, contingent_upside, adp, confidence, source_date, ...)`
 
-The Google Sheet is editorial input, never a live dependency. Import validates the entire snapshot and creates a new immutable version. Draft initialization pins one version and copies the required rows into the DO. Updates create a new version; they do not mutate the active draft's catalog.
+The Google Sheet is Verl's research database, never a live draft dependency. Verl publishes an immutable profile snapshot; the handoff checks identity and transport shape without reclassifying or scoring the research. Draft initialization pins one version and copies the required profiles into the DO. Updates create a new version; they do not mutate the active draft's catalog.
 
 Do not add D1 merely to duplicate `picks`. Cross-product transactions do not exist between D1 and a DO, so that would weaken the live consistency model.
 

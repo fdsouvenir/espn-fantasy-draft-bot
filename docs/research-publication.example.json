@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "draftKey": "staging:espn:2026:123456:example-draft",
+  "publicationId": "verl-2026-08-27T170000Z",
+  "roleVocabularyVersion": "2026.1",
+  "rubricVersion": "2026.1-draft",
+  "publishedAt": "2026-08-27T17:00:00Z",
+  "publishedBy": "Verl",
+  "teamSnapshots": [
+    {
+      "nflTeam": "ATL",
+      "complete": true,
+      "coveredPlayerKeys": ["espn:1001"],
+      "notes": "Full fantasy-relevant ATL backfield packet reviewed."
+    }
+  ],
+  "profiles": [
+    {
+      "playerKey": "espn:1001",
+      "nflTeam": "ATL",
+      "profile": {
+        "schemaVersion": 2,
+        "profileId": "atl-rb-1001-20260827",
+        "position": "RB",
+        "researchedRole": "clear-lead",
+        "researchState": "complete",
+        "unknownReason": null,
+        "taxonomyState": "matched",
+        "publicationStatus": "published",
+        "warRoomHeadline": "Clear first back with both early-down and passing-game access.",
+        "currentRoleSummary": "Leads the current first-team backfield rotation.",
+        "opportunitySummary": "Projects for the largest carry share and a meaningful route share.",
+        "competitionSummary": "A second back retains a defined change-of-pace package.",
+        "availabilitySummary": "Practicing without a reported limitation.",
+        "draftImplication": "One of the remaining backs with a researched starting role, not merely committee access.",
+        "contingency": null,
+        "confidence": "medium",
+        "confidenceReason": "Two independent camp observations align with first-team usage.",
+        "alternativesConsidered": ["committee-1a"],
+        "unresolvedQuestions": ["Exact two-minute rotation remains unsettled."],
+        "supportingObservationIds": ["obs-atl-001", "obs-atl-004"],
+        "contradictingObservationIds": [],
+        "sourceUrls": ["https://example.com/source/atl-001"],
+        "structuredFindings": {
+          "position": "RB",
+          "carryShare": {"low": 0.52, "high": 0.66},
+          "routeShare": {"low": 0.42, "high": 0.58},
+          "goalLineRole": "primary",
+          "backfieldRank": 1,
+          "handcuffType": "direct",
+          "competitionStatus": "leaning"
+        },
+        "additionalFindings": {
+          "twoMinuteRole": "not fully resolved"
+        },
+        "researchedAt": "2026-08-27T15:00:00Z",
+        "classifiedAt": "2026-08-27T16:00:00Z",
+        "expiresAt": "2026-09-03T16:00:00Z",
+        "classifiedBy": "Verl"
+      }
+    }
+  ]
+}
