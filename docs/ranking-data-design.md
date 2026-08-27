@@ -87,6 +87,10 @@ pass. The position profile tabs hold only Verl's final answer and evidence trace
 `additional_findings_json` column prevents the fixed columns from pretending to enumerate every
 useful answer research might uncover.
 
+The checked-in `config/research-vocabulary.json` is the canonical role, status, and Sheet-header
+manifest. `scripts/check_research_sheet_contract.py` compares it with the live Sheet read-only so
+schema drift is caught without introducing a Sheet compiler.
+
 The human reviews exceptions marked `needs-review`, not every row. `published` means Verl completed
 its collection, synthesis, classification, and self-check.
 

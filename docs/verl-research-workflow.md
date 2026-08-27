@@ -28,7 +28,9 @@ qualified team sources
 | 3. Publish | `Team Snapshots`, position `Profiles` | Team closure is explicit and each profile contains the current conclusion, separate contingency, structured core, prose, and evidence trace |
 | 4. Audit | `Publication Review` | Coverage, exceptions, taxonomy gaps, staleness, and evidence trace have been reviewed |
 
-`Player Directory` supplies canonical ESPN identity. `Lists` supplies the versioned vocabulary.
+`Player Directory` supplies canonical ESPN identity. Draftside imports every supported ESPN catalog
+player and marks a row active when the player belongs to an NFL team rather than the free-agent
+pool. `Lists` supplies the versioned vocabulary.
 Legacy Role Overrides and Legacy Tiers & Flags are history only.
 
 ## Pass 1 — collect complete team evidence
@@ -66,8 +68,9 @@ supporting and contradicting observation IDs, and direct source URLs.
 ## Pass 3 — close the team and publish profiles
 
 Before using a team-relative rank, complete that team's row in `Team Snapshots` and list every
-covered player key. Review target and carry shares together as a team; never infer team closure from
-isolated player rows.
+covered player key. Use the same `research_run_id` on the Team Snapshot and every profile from that
+pass. Review WR, TE, and receiving-back target shares together, and review RB carry shares together;
+never infer team closure from isolated player rows.
 
 Write the current conclusion to the matching position profile. The profile must answer:
 
@@ -81,6 +84,8 @@ Write the current conclusion to the matching position profile. The profile must 
 
 Use `taxonomy-gap` when no approved role fits. Use `needs-review` for a material conflict, taxonomy
 gap, or consequential uncertainty. No profile row means unresearched; never invent `role-unknown`.
+Use Sheet-local `workflow_status = working` while drafting a row and `superseded` for retained
+history. Only `publication_status = needs-review` or `published` enters publication JSON.
 
 ## Pass 4 — league audit and handoff
 
@@ -102,3 +107,7 @@ research database; it is not compiled by application logic.
 
 Store ISO-8601 UTC timestamps and direct HTTPS URLs. A stale profile is shown as stale; software
 does not invent a replacement.
+
+Before building the publication object, run the read-only contract check documented in
+`docs/research-sheet-operations.md`. It compares the live headers and controlled vocabulary with the
+checked-in manifest; it does not parse conclusions or classify players.
