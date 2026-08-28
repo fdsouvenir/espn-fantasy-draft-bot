@@ -36,15 +36,23 @@ function setupDraftsidePublishing() {
   const publishUrl = properties.getProperty("DRAFTSIDE_PUBLISH_URL");
   const triggerToken = properties.getProperty("DRAFTSIDE_PUBLISH_TRIGGER_TOKEN");
   if (!publishUrl || !/^https:\/\//.test(publishUrl) || !triggerToken || triggerToken.length < 32) {
-    SpreadsheetApp.getUi().alert(
+    showSetupMessage_(
       "Draftside control is ready. Configure the HTTPS publisher URL and trigger token in Script Properties, then run this installer again to enable automatic publishing.",
     );
     return;
   }
   ensureAutomaticPublisherTrigger_();
-  SpreadsheetApp.getUi().alert(
+  showSetupMessage_(
     "Draftside automatic publishing is installed.",
   );
+}
+
+function showSetupMessage_(message) {
+  try {
+    SpreadsheetApp.getUi().alert(message);
+  } catch (error) {
+    console.log(message);
+  }
 }
 
 function configureDraftsidePublishing(spreadsheetId, publishUrl, triggerToken) {
