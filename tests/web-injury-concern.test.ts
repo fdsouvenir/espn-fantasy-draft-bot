@@ -10,6 +10,9 @@ describe("War Room injury concern labels", () => {
     "Healthy and a full participant.",
     "No current injury concern.",
     "Returned to full practice after an ankle issue.",
+    "No player-specific injury update was found in the evidence window.",
+    "No current direct injury evidence was found; availability is unconfirmed.",
+    "Availability was not addressed by the reviewed sources.",
   ])("does not flag a cleared or healthy availability summary: %s", (summary) => {
     expect(hasInjuryConcern(summary)).toBe(false);
   });
@@ -22,5 +25,16 @@ describe("War Room injury concern labels", () => {
     "Out for Week 1.",
   ])("flags a current availability concern: %s", (summary) => {
     expect(hasInjuryConcern(summary)).toBe(true);
+  });
+
+  it.each(["QUESTIONABLE", "OUT", "IR", "PUP", "NFI", "SUSPENDED"])(
+    "honors an explicit ESPN injury status: %s",
+    (status) => {
+      expect(hasInjuryConcern("No player-specific availability report was found.", status)).toBe(true);
+    },
+  );
+
+  it.each(["ACTIVE", "NORMAL", ""])("does not invent concern from a clear ESPN status: %s", (status) => {
+    expect(hasInjuryConcern("No player-specific injury update was found.", status)).toBe(false);
   });
 });

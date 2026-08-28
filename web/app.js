@@ -152,6 +152,7 @@ import { hasInjuryConcern } from "./injury-concern.js";
       researchBucket: raw.researchInventoryBucket ?? null,
       scoringBand: raw.researchOffenseScoringBand ?? raw.researchProfile?.additionalFindings?.offenseScoringBand ?? "unknown",
       teamNotes: raw.researchTeamNotes ?? raw.researchProfile?.additionalFindings?.teamNotes ?? "",
+      injuryStatus: String(raw.injuryStatus ?? "").trim().toUpperCase(),
       profile,
       returnProbability: returnProbability === undefined || returnProbability === null
         ? null
@@ -375,7 +376,8 @@ import { hasInjuryConcern } from "./injury-concern.js";
 
   function injuryConcern(player) {
     const copy = player.profile?.availability?.trim() ?? "";
-    return hasInjuryConcern(copy) ? copy : "";
+    if (!hasInjuryConcern(copy, player.injuryStatus)) return "";
+    return copy || `ESPN injury status: ${titleCase(player.injuryStatus)}.`;
   }
 
   function scoringBandCopy(player) {
