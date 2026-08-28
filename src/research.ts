@@ -7,8 +7,8 @@ import type {
   ResearchPublicationV1,
   ResearchRange,
   TeamResearchSnapshotV1,
-} from "./contracts";
-import vocabulary from "../config/research-vocabulary.json";
+} from "./contracts.js";
+import vocabulary from "../config/research-vocabulary.json" with { type: "json" };
 
 export const ROLE_VOCABULARY_VERSION = vocabulary.roleVocabularyVersion;
 export const RESEARCH_PUBLICATION_STATUSES = vocabulary.publicationStatuses;

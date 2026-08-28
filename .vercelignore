@@ -1,0 +1,10 @@
+# The relay only needs its endpoint and the shared, deterministic importer.
+/*
+!/.vercelignore
+!/api
+!/config
+!/src
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/worker-configuration.d.ts

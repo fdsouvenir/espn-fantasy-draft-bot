@@ -7,13 +7,13 @@ import type {
   ResearchProfileV2,
   ResearchPublicationV1,
   ResearchRange,
-} from "./contracts";
+} from "./contracts.js";
 import {
   normalizeResearchPosition,
   RESEARCH_PUBLICATION_STATUSES,
   ROLE_VOCABULARY_VERSION,
   roleAllowed,
-} from "./research";
+} from "./research.js";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const HEX_64 = /^[a-f0-9]{64}$/;

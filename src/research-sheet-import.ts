@@ -1,7 +1,7 @@
-import type { ResearchPublicationV1 } from "./contracts";
-import { RESEARCH_PUBLICATION_STATUSES, ROLE_VOCABULARY_VERSION } from "./research";
-import { validateResearchPublication } from "./validation";
-import vocabulary from "../config/research-vocabulary.json";
+import type { ResearchPublicationV1 } from "./contracts.js";
+import { RESEARCH_PUBLICATION_STATUSES, ROLE_VOCABULARY_VERSION } from "./research.js";
+import { validateResearchPublication } from "./validation.js";
+import vocabulary from "../config/research-vocabulary.json" with { type: "json" };
 
 export type ResearchSheetImportV1 = {
   schemaVersion: 1;

@@ -1,5 +1,5 @@
-import { buildResearchPublication, ResearchSheetImportError } from "../../src/research-sheet-import";
-import { bytesToHex, canonicalHmacInput } from "../../src/security";
+import { buildResearchPublication, ResearchSheetImportError } from "../../src/research-sheet-import.js";
+import { bytesToHex, canonicalHmacInput } from "../../src/security.js";
 
 declare const process: { env: Record<string, string | undefined> };
 
