@@ -53,6 +53,13 @@ The backend stores only a SHA-256 verifier for the device token. Every batch is 
 
 The dashboard remains behind Cloudflare Access. The app reaches only the bounded companion registration, room-resolution, board-selection, and ingestion endpoints.
 
+Configure the companion Access application with four exact destinations:
+`/api/v1/companion/register`, `/api/v1/companion/resolve`,
+`/api/v1/companion/select`, and `/api/v1/drafts/*/companion-ingest`. Do not use a broader
+`/api/v1/companion/*` bypass because that namespace also contains authenticated device
+administration. Requests reaching these four paths still fail closed unless the Worker validates
+the per-device credential; ingestion also requires its signed timestamp and nonce.
+
 ## Reliability
 
 - **Browser reload:** recover the complete board from ESPN's `INIT` frame.

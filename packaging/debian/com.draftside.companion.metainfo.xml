@@ -43,6 +43,14 @@
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.2" date="2026-08-28">
+      <description>
+        <ul>
+          <li>Keeps the managed Chrome session open while dashboard requests retry.</li>
+          <li>Opens the selected private War Room automatically.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-08-25">
       <description>
         <p>Stops the companion runtime and managed Chrome window when its status window closes.</p>

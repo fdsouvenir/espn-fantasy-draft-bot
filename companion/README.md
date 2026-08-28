@@ -62,6 +62,18 @@ The system journal records redacted status transitions without dashboard URLs, d
 
 The package contains no deployment URL. The user supplies it at runtime, while access remains protected by Cloudflare Access and the per-device credential.
 
+The Access deployment must route only these exact companion destinations through the
+per-device application policy:
+
+- `/api/v1/companion/register`
+- `/api/v1/companion/resolve`
+- `/api/v1/companion/select`
+- `/api/v1/drafts/*/companion-ingest`
+
+Do not bypass `/api/v1/companion/*`: device administration and the War Room remain behind
+interactive Access. The Worker still requires the device token on every route and additionally
+requires a timestamped, nonce-protected HMAC for ingestion.
+
 ## Development
 
 ```bash

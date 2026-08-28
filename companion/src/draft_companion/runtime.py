@@ -200,25 +200,32 @@ class Companion:
     def _connect_device_draft(
         self, worker: DeviceWorkerClient
     ) -> tuple[Mapping[str, Any], Any, Mapping[str, Any], list[dict[str, Any]]] | None:
-        worker.enroll(platform.node() or "Draft laptop", __version__)
+        while not self.stopping:
+            try:
+                worker.enroll(platform.node() or "Draft laptop", __version__)
+                break
+            except WorkerError as error:
+                reason = str(error)
+                if reason == "device_revoked":
+                    raise
+                self._health(
+                    "dashboard_unreachable",
+                    reason=reason,
+                    dashboardUrl=self.dashboard_url,
+                )
+                self.sleeper(self.config.runtime.reconnect_seconds)
+        if self.stopping:
+            return None
         reload_page = True
         while not self.stopping:
-            preferred = None
-            bootstrap = None
-            selection_key = _selection_key(self.config.selection_file)
-            if selection_key is not None:
-                try:
-                    bootstrap, preferred = worker.select_draft(selection_key)
-                except WorkerError as error:
-                    if str(error) != "device_selection_draft_not_found":
-                        raise
-                    try:
-                        self.config.selection_file.unlink()
-                    except FileNotFoundError:
-                        pass
-            preferred_identity = _draft_identity(preferred) if preferred is not None else None
             source = None
             try:
+                preferred = None
+                bootstrap = None
+                selection_key = _selection_key(self.config.selection_file)
+                if selection_key is not None:
+                    bootstrap, preferred = worker.select_draft(selection_key)
+                preferred_identity = _draft_identity(preferred) if preferred is not None else None
                 source = self.frame_factory(
                     self.config.chrome.debug_port,
                     self.config.draft_url,
@@ -268,9 +275,36 @@ class Companion:
                     pass
                 connected_source, source = source, None
                 return bootstrap, connected_source, selected, options
+            except WorkerError as error:
+                reason = str(error)
+                if reason == "device_revoked":
+                    raise
+                if reason == "device_selection_draft_not_found":
+                    try:
+                        self.config.selection_file.unlink()
+                    except FileNotFoundError:
+                        pass
+                self._health(
+                    "dashboard_unreachable",
+                    reason=reason,
+                    dashboardUrl=self.dashboard_url,
+                )
+                self.sleeper(self.config.runtime.reconnect_seconds)
             except DraftRoomAmbiguousError as error:
                 rooms = _room_payload(error.identities)
-                drafts = worker.resolve_drafts(rooms) if rooms else []
+                try:
+                    drafts = worker.resolve_drafts(rooms) if rooms else []
+                except WorkerError as worker_error:
+                    reason = str(worker_error)
+                    if reason == "device_revoked":
+                        raise
+                    self._health(
+                        "dashboard_unreachable",
+                        reason=reason,
+                        dashboardUrl=self.dashboard_url,
+                    )
+                    self.sleeper(self.config.runtime.reconnect_seconds)
+                    continue
                 if len(drafts) == 1:
                     selected = drafts[0]
                     source = self.frame_factory(
@@ -280,7 +314,19 @@ class Companion:
                         preferred_identity=_draft_identity(selected),
                     )
                     reload_page = False
-                    bootstrap, selected = worker.select_draft(str(selected["draftKey"]))
+                    try:
+                        bootstrap, selected = worker.select_draft(str(selected["draftKey"]))
+                    except WorkerError as worker_error:
+                        reason = str(worker_error)
+                        if reason == "device_revoked":
+                            raise
+                        self._health(
+                            "dashboard_unreachable",
+                            reason=reason,
+                            dashboardUrl=self.dashboard_url,
+                        )
+                        self.sleeper(self.config.runtime.reconnect_seconds)
+                        continue
                     connected_source, source = source, None
                     return bootstrap, connected_source, selected, _draft_options(drafts)
                 state = (

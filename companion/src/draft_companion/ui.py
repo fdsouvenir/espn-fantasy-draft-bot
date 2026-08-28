@@ -62,6 +62,14 @@ def _board_url(value: object) -> str | None:
     return value if len(draft) == 1 and bool(draft[0]) else None
 
 
+def _automatic_board_url(health: dict[str, object], opened_url: str | None) -> str | None:
+    url = _board_url(health.get("dashboardUrl"))
+    selected = health.get("selectedDraft")
+    if url is None or url == opened_url or not isinstance(selected, dict):
+        return None
+    return url
+
+
 def _read_health() -> dict[str, object]:
     try:
         value = json.loads(_health_path().read_text(encoding="utf-8"))
@@ -360,6 +368,7 @@ def main() -> int:
             }
             rendered_options = None
             selection_pending = False
+            automatically_opened_url = None
 
             def render_options(options):
                 nonlocal rendered_options
@@ -405,15 +414,20 @@ def main() -> int:
                     picker_buttons.append(choice)
 
             def refresh():
-                nonlocal selection_pending
+                nonlocal automatically_opened_url, selection_pending
                 health = _read_health()
                 state = str(health.get("state", "starting"))
                 if state != "draft_selection_required":
                     selection_pending = False
                 dashboard_url = _board_url(health.get("dashboardUrl"))
-                dashboard.set_sensitive(
-                    dashboard_url is not None and state in {"live", "complete", "delivery_rejected"}
-                )
+                dashboard.set_sensitive(dashboard_url is not None)
+                automatic_url = _automatic_board_url(health, automatically_opened_url)
+                if automatic_url is not None:
+                    automatically_opened_url = automatic_url
+                    try:
+                        Gio.AppInfo.launch_default_for_uri(automatic_url, None)
+                    except GLib.Error:
+                        pass
                 selected = health.get("selectedDraft")
                 if isinstance(selected, dict) and isinstance(selected.get("displayName"), str):
                     season = selected.get("season")

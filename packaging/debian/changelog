@@ -1,3 +1,10 @@
+draftside-companion (0.4.2-1) unstable; urgency=medium
+
+  * Keep managed Chrome open while dashboard enrollment or draft resolution retries.
+  * Open the selected private War Room automatically while retaining the manual action.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Fri, 28 Aug 2026 13:40:00 -0500
+
 draftside-companion (0.4.1-1) unstable; urgency=medium
 
   * Stop Draftside and its managed Chrome window when the status window closes.

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import ClassVar
 
-from draft_companion.cdp import DraftRoomNotFoundError
+from draft_companion.cdp import DraftRoomIdentity, DraftRoomNotFoundError
 from draft_companion.config import ChromeConfig, Config, RuntimeConfig
 from draft_companion.credentials import Credentials
 from draft_companion.runtime import (
@@ -171,6 +171,61 @@ def test_worker_retry_does_not_reload_draft_room_again(tmp_path: Path, monkeypat
     runtime.run()
 
     assert reloads == [True, False]
+
+
+def test_device_resolution_failure_keeps_runtime_and_chrome_open(tmp_path: Path):
+    cfg = config(tmp_path)
+    reloads = []
+    health_updates = []
+    runtime = None
+
+    class OpenDraftRoom:
+        room_identity = DraftRoomIdentity(2026, "123", None)
+
+        def close(self):
+            pass
+
+    class DeviceWorker:
+        def enroll(self, _name, _version):
+            pass
+
+        def resolve_drafts(self, _rooms):
+            raise WorkerError("device_resolution_network_error")
+
+    def frames(_port, _url, reload_page, *, preferred_identity=None):
+        assert preferred_identity is None
+        reloads.append(reload_page)
+        return OpenDraftRoom()
+
+    runtime = Companion(cfg, frame_factory=frames, sleeper=lambda _seconds: runtime.stop())
+    runtime._health = lambda state, **fields: health_updates.append((state, fields))
+
+    assert runtime._connect_device_draft(DeviceWorker()) is None
+    assert reloads == [True]
+    assert health_updates[-1] == (
+        "dashboard_unreachable",
+        {
+            "reason": "device_resolution_network_error",
+            "dashboardUrl": "https://worker.example.com",
+        },
+    )
+
+
+def test_device_enrollment_failure_retries_without_exiting(tmp_path: Path):
+    cfg = config(tmp_path)
+    health_updates = []
+    runtime = None
+
+    class DeviceWorker:
+        def enroll(self, _name, _version):
+            raise WorkerError("device_enrollment_network_error")
+
+    runtime = Companion(cfg, sleeper=lambda _seconds: runtime.stop())
+    runtime._health = lambda state, **fields: health_updates.append((state, fields))
+
+    assert runtime._connect_device_draft(DeviceWorker()) is None
+    assert health_updates[-1][0] == "dashboard_unreachable"
+    assert health_updates[-1][1]["reason"] == "device_enrollment_network_error"
 
 
 def test_atomic_json_never_leaves_world_readable_state(tmp_path: Path):

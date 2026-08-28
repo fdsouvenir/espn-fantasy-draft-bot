@@ -223,8 +223,16 @@ Create one self-hosted Access application for the staging hostname:
 
 - interactive allow policy restricted to approved operator identities;
 - service-token allow policy for the ingestor;
-- no public bypass policy;
+- a separate exact-destination companion application for
+  `/api/v1/companion/register`, `/api/v1/companion/resolve`,
+  `/api/v1/companion/select`, and `/api/v1/drafts/*/companion-ingest` only;
+- no hostname-wide or `/api/v1/companion/*` public bypass policy;
 - `workers_dev = false` and no alternate unprotected route.
+
+The exact companion destinations are application-authenticated by the Worker with a revocable
+per-device token. Companion ingestion also requires its timestamped, nonce-protected HMAC. The
+War Room, companion device administration, and all other API routes remain protected by the
+interactive or service-token Access policies.
 
 The service-token client ID and secret stay in the local operator vault and are sent in Cloudflare's service-token headers. They never enter browser code, source, fixtures, or logs. Access protects the hostname; the Worker does not need to reimplement interactive login for staging.
 
