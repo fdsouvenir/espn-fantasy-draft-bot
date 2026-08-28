@@ -1,3 +1,5 @@
+import { hasInjuryConcern } from "./injury-concern.js";
+
 (() => {
   const params = new URLSearchParams(window.location.search);
   const requestedDraft = params.get("draft");
@@ -373,10 +375,7 @@
 
   function injuryConcern(player) {
     const copy = player.profile?.availability?.trim() ?? "";
-    if (!copy) return "";
-    const benign = /^(available and participating|healthy|full participant|available\.?$|no (?:current )?(?:injury|availability) concern)/i;
-    const concerning = /(questionable|doubtful|limited|injur|shoulder|ankle|hamstring|knee|concussion|pup|missed|absence|rehab|no-contact|not cleared|out\b)/i;
-    return concerning.test(copy) && !benign.test(copy) ? copy : "";
+    return hasInjuryConcern(copy) ? copy : "";
   }
 
   function scoringBandCopy(player) {
