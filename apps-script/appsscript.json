@@ -1,12 +1,18 @@
 {
   "timeZone": "America/Chicago",
   "dependencies": {},
+  "executionApi": {
+    "access": "MYSELF"
+  },
   "exceptionLogging": "STACKDRIVER",
   "oauthScopes": [
     "https://www.googleapis.com/auth/script.container.ui",
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/script.scriptapp",
     "https://www.googleapis.com/auth/spreadsheets.currentonly"
+  ],
+  "urlFetchWhitelist": [
+    "https://draftside-research-publisher.vercel.app/"
   ],
   "runtimeVersion": "V8"
 }

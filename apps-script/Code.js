@@ -41,15 +41,45 @@ function setupDraftsidePublishing() {
     );
     return;
   }
-  const existing = ScriptApp.getProjectTriggers().filter(
-    (trigger) => trigger.getHandlerFunction() === "processResearchPublicationRequests",
-  );
-  if (existing.length === 0) {
-    ScriptApp.newTrigger("processResearchPublicationRequests").timeBased().everyMinutes(1).create();
-  }
+  ensureAutomaticPublisherTrigger_();
   SpreadsheetApp.getUi().alert(
     "Draftside automatic publishing is installed.",
   );
+}
+
+function configureDraftsidePublishing(spreadsheetId, publishUrl, triggerToken) {
+  if (!spreadsheetId || !/^[A-Za-z0-9_-]{20,}$/.test(spreadsheetId)) {
+    throw new Error("DRAFTSIDE_SPREADSHEET_ID is invalid");
+  }
+  if (!publishUrl || !/^https:\/\//.test(publishUrl)) {
+    throw new Error("DRAFTSIDE_PUBLISH_URL must use HTTPS");
+  }
+  if (!triggerToken || triggerToken.length < 32) {
+    throw new Error("DRAFTSIDE_PUBLISH_TRIGGER_TOKEN is invalid");
+  }
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const properties = PropertiesService.getScriptProperties();
+  properties.setProperties({
+    DRAFTSIDE_SPREADSHEET_ID: spreadsheet.getId(),
+    DRAFTSIDE_PUBLISH_URL: publishUrl,
+    DRAFTSIDE_PUBLISH_TRIGGER_TOKEN: triggerToken,
+  });
+  ensureControlSheet_(spreadsheet);
+  const triggerInstalled = ensureAutomaticPublisherTrigger_();
+  return {
+    spreadsheetId: spreadsheet.getId(),
+    publishUrl,
+    triggerInstalled,
+  };
+}
+
+function ensureAutomaticPublisherTrigger_() {
+  const existing = ScriptApp.getProjectTriggers().some(
+    (trigger) => trigger.getHandlerFunction() === "processResearchPublicationRequests",
+  );
+  if (existing) return false;
+  ScriptApp.newTrigger("processResearchPublicationRequests").timeBased().everyMinutes(1).create();
+  return true;
 }
 
 function requestResearchPublication() {
