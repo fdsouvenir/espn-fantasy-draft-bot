@@ -6,6 +6,7 @@ import type { CatalogPlayerV1, DraftInitV1, IngestBatchV1 } from "../src/contrac
 import { bytesToHex, canonicalHmacInput } from "../src/security";
 
 const DRAFT_KEY = "staging:espn:ffl:2026:123456789:1786494600000";
+const LEGACY_DRAFT_KEY = "staging:espn:ffl:2026:987654321:1786494700000";
 const TOKEN = "device-token-with-more-than-thirty-two-safe-characters";
 const DEVICE_ID = "10000000-0000-4000-8000-000000000001";
 const OTHER_DEVICE_ID = "10000000-0000-4000-8000-000000000002";
@@ -31,10 +32,10 @@ function player(): CatalogPlayerV1 {
   };
 }
 
-function draftInit(): DraftInitV1 {
+function draftInit(draftKey = DRAFT_KEY): DraftInitV1 {
   return {
     schemaVersion: 1,
-    draftKey: DRAFT_KEY,
+    draftKey,
     expectedTeams: 2,
     expectedRounds: 1,
     totalPickSlots: 2,
@@ -205,6 +206,51 @@ describe("companion device registry", () => {
     });
     expect(enabled.status).toBe(200);
     expect(await enabled.json()).toMatchObject({ device: { deviceId: DEVICE_ID, revokedAt: null } });
+  });
+
+  it("backfills an initialized draft that predates the companion registry", async () => {
+    await env.DRAFT_SESSION.getByName(LEGACY_DRAFT_KEY).initializeDraft(draftInit(LEGACY_DRAFT_KEY));
+
+    const badOrigin = await SELF.fetch("http://worker.test/api/v1/companion/register?resource=draft", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://attacker.example",
+      },
+      body: JSON.stringify({ draftKey: LEGACY_DRAFT_KEY }),
+    });
+    expect(badOrigin.status).toBe(403);
+
+    const backfilled = await SELF.fetch("http://worker.test/api/v1/companion/register?resource=draft", {
+      method: "POST",
+      headers: { ...ACCESS_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ draftKey: LEGACY_DRAFT_KEY }),
+    });
+    expect(backfilled.status).toBe(201);
+    expect(await backfilled.json()).toMatchObject({
+      draft: {
+        draftKey: LEGACY_DRAFT_KEY,
+        displayName: "ESPN league 987654321",
+        season: 2026,
+        leagueId: "987654321",
+        draftEpoch: 1786494700000,
+      },
+      bootstrap: { draftKey: LEGACY_DRAFT_KEY, expectedTeams: 2, totalPickSlots: 2 },
+    });
+
+    const resolved = await SELF.fetch("http://worker.test/api/v1/companion/resolve", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json",
+        "X-Draftside-Device": DEVICE_ID,
+      },
+      body: JSON.stringify({ rooms: [{ season: 2026, leagueId: "987654321" }] }),
+    });
+    expect(resolved.status).toBe(200);
+    expect(await resolved.json()).toMatchObject({
+      drafts: [{ draftKey: LEGACY_DRAFT_KEY, leagueId: "987654321" }],
+    });
   });
 
   it("authorizes companion HMAC ingestion and rejects unknown or revoked devices", async () => {

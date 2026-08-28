@@ -136,17 +136,25 @@ function validateDraftRooms(value: unknown): CompanionDraftIdentity[] {
   });
 }
 
-function companionDraft(config: DraftInitV1, initializedAt: string): CompanionDraft | null {
-  const match = /^(?:local|staging):espn:ffl:(\d{4}):(\d{1,12}):(\d{1,15})$/.exec(config.draftKey);
+function companionDraftFromKey(
+  draftKey: string,
+  initializedAt: string,
+  displayName?: string,
+): CompanionDraft | null {
+  const match = /^(?:local|staging):espn:ffl:(\d{4}):(\d{1,12}):(\d{1,15})$/.exec(draftKey);
   if (!match?.[1] || !match[2] || !match[3]) return null;
   return {
-    draftKey: config.draftKey,
-    displayName: config.displayName ?? `ESPN league ${match[2]}`,
+    draftKey,
+    displayName: displayName ?? `ESPN league ${match[2]}`,
     season: Number(match[1]),
     leagueId: match[2],
     draftEpoch: Number(match[3]),
     initializedAt,
   };
+}
+
+function companionDraft(config: DraftInitV1, initializedAt: string): CompanionDraft | null {
+  return companionDraftFromKey(config.draftKey, initializedAt, config.displayName);
 }
 
 async function verifyCompanionSignature(request: Request, token: string, bytes: Uint8Array): Promise<string> {
@@ -247,6 +255,20 @@ export default {
       }
       const registry = env.COMPANION_REGISTRY.getByName("primary");
       if (url.pathname === "/api/v1/companion/register" && request.method === "POST") {
+        if (url.searchParams.get("resource") === "draft") {
+          routeLabel = "companion.register.draft";
+          requireSameOrigin(request);
+          if (!request.headers.get("content-type")?.startsWith("application/json")) {
+            throw new Error("invalid_content_type");
+          }
+          const bytes = await readBoundedBody(request, MAX_SELECTION_BYTES);
+          const draftKey = validateDraftSelection(JSON.parse(new TextDecoder().decode(bytes)));
+          const bootstrap = await env.DRAFT_SESSION.getByName(draftKey).getCompanionConfig();
+          if (bootstrap.draftKey !== draftKey) throw new Error("draft_identity_conflict");
+          const draft = companionDraftFromKey(draftKey, new Date().toISOString());
+          if (!draft) throw new Error("invalid_draft_key");
+          return json({ draft: await registry.registerDraft(draft), bootstrap }, 201);
+        }
         routeLabel = "companion.register";
         if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("invalid_content_type");
         const token = bearerToken(request);
