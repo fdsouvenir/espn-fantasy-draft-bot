@@ -43,6 +43,11 @@
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.3" date="2026-08-28">
+      <description>
+        <p>Distinguishes ESPN room detection from War Room board registration.</p>
+      </description>
+    </release>
     <release version="0.4.2" date="2026-08-28">
       <description>
         <ul>

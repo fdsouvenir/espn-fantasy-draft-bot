@@ -1,4 +1,4 @@
-from draft_companion.ui import _automatic_board_url, _board_url
+from draft_companion.ui import _automatic_board_url, _board_url, _connection_states
 
 
 def test_board_url_requires_one_nonempty_draft_query():
@@ -16,3 +16,21 @@ def test_selected_board_opens_automatically_only_once():
     assert _automatic_board_url(health, None) == url
     assert _automatic_board_url(health, url) is None
     assert _automatic_board_url({"dashboardUrl": url}, None) is None
+
+
+def test_uninitialized_board_does_not_claim_espn_is_disconnected():
+    assert _connection_states("draft_not_initialized", False) == (
+        "Connected",
+        "Open",
+        "Detected",
+        "Not initialized",
+    )
+
+
+def test_live_state_distinguishes_room_from_selected_board():
+    assert _connection_states("live", True) == (
+        "Connected",
+        "Open",
+        "Connected",
+        "Selected",
+    )

@@ -70,6 +70,48 @@ def _automatic_board_url(health: dict[str, object], opened_url: str | None) -> s
     return url
 
 
+def _connection_states(state: str, board_selected: bool) -> tuple[str, str, str, str]:
+    dashboard = (
+        "Access revoked"
+        if state == "revoked"
+        else "Unavailable"
+        if state == "dashboard_unreachable"
+        else "Connecting"
+        if state in {"starting", "connecting_dashboard"}
+        else "Connected"
+    )
+    chrome = (
+        "Unavailable"
+        if state == "chrome_unavailable"
+        else "Stopped"
+        if state == "stopped"
+        else "Open"
+    )
+    espn = (
+        "Connected"
+        if state in {"live", "complete", "delivery_rejected", "reconnecting"}
+        else "Detected"
+        if state in {"draft_not_initialized", "draft_selection_required"}
+        else "Identifying"
+        if state == "draft_room_unidentified"
+        else "Waiting for you"
+        if state == "waiting_for_draft_room"
+        else "Stopped"
+        if state == "stopped"
+        else "Not detected"
+    )
+    board = (
+        "Selected"
+        if board_selected
+        else "Not initialized"
+        if state in {"draft_not_initialized", "no_initialized_draft"}
+        else "Choice required"
+        if state == "draft_selection_required"
+        else "Not selected"
+    )
+    return dashboard, chrome, espn, board
+
+
 def _read_health() -> dict[str, object]:
     try:
         value = json.loads(_health_path().read_text(encoding="utf-8"))
@@ -334,8 +376,8 @@ def main() -> int:
                     "More than one initialized board could match the open ESPN draft room.",
                 ),
                 "draft_not_initialized": (
-                    "This draft has no board yet",
-                    "Initialize this ESPN draft on the private dashboard, then click Reconnect.",
+                    "ESPN room found — War Room board missing",
+                    "Draftside detected this ESPN room, but its initialized board is not registered yet.",
                 ),
                 "draft_room_unidentified": (
                     "Still identifying this draft room",
@@ -460,30 +502,8 @@ def main() -> int:
                 ):
                     copy = f"{filled} of {total} picks received. {copy}"
                 detail.set_label(copy)
-                dashboard_state = (
-                    "Access revoked"
-                    if state == "revoked"
-                    else "Unavailable"
-                    if state == "dashboard_unreachable"
-                    else "Connecting"
-                    if state in {"starting", "connecting_dashboard"}
-                    else "Connected"
-                )
-                chrome_state = (
-                    "Unavailable"
-                    if state == "chrome_unavailable"
-                    else "Stopped"
-                    if state == "stopped"
-                    else "Open"
-                )
-                draft_state = (
-                    "Connected"
-                    if state in {"live", "complete", "delivery_rejected"}
-                    else "Waiting for you"
-                    if state == "waiting_for_draft_room"
-                    else "Stopped"
-                    if state == "stopped"
-                    else "Not connected"
+                dashboard_state, chrome_state, draft_state, board_state = _connection_states(
+                    state, isinstance(selected, dict)
                 )
                 checklist.set_label(
                     "\n".join(
@@ -491,6 +511,7 @@ def main() -> int:
                             f"Private dashboard: {dashboard_state}",
                             f"Draftside Chrome: {chrome_state}",
                             f"ESPN draft room: {draft_state}",
+                            f"War Room board: {board_state}",
                         )
                     )
                 )
