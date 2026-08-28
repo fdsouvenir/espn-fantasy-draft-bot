@@ -190,8 +190,18 @@ describe("research presentation and audit", () => {
       .toContain("research-run-mismatch");
   });
 
-  it("rejects identity mismatches instead of attaching research to the wrong player", () => {
-    expect(() => auditResearchPublication(publication(), [catalogPlayer({ nflTeam: "DET" })]))
+  it("warns about mutable team drift in the pinned ESPN catalog", () => {
+    const warnings = auditResearchPublication(publication(), [catalogPlayer({ nflTeam: "DET" })]);
+    expect(warnings.map((item) => item.code)).toContain("player-team-mismatch");
+  });
+
+  it("warns when a researched player is not in the pinned ESPN catalog", () => {
+    const warnings = auditResearchPublication(publication(), []);
+    expect(warnings.map((item) => item.code)).toContain("player-not-in-catalog");
+  });
+
+  it("rejects position mismatches instead of attaching research to the wrong player", () => {
+    expect(() => auditResearchPublication(publication(), [catalogPlayer({ position: "WR" })]))
       .toThrow("invalid_research_player_identity");
   });
 });

@@ -221,10 +221,26 @@ export function auditResearchPublication(
   for (const entry of publication.profiles) {
     const playerId = playerIdFromKey(entry.playerKey);
     const player = playerId ? catalogById.get(playerId) : undefined;
-    if (!player) throw new Error("invalid_research_player_key");
+    if (!player) {
+      warnings.push(warning(
+        "player-not-in-catalog",
+        "The Sheet profile has no matching player in the draft's pinned ESPN catalog.",
+        entry.playerKey,
+        entry.nflTeam,
+      ));
+      continue;
+    }
     const catalogPosition = normalizeResearchPosition(player.position);
-    if (catalogPosition !== entry.profile.position || player.nflTeam !== entry.nflTeam) {
+    if (catalogPosition !== entry.profile.position) {
       throw new Error("invalid_research_player_identity");
+    }
+    if (player.nflTeam !== entry.nflTeam) {
+      warnings.push(warning(
+        "player-team-mismatch",
+        `The Sheet lists ${entry.nflTeam}, while the draft's pinned ESPN catalog lists ${player.nflTeam}. The player ID and position still match.`,
+        entry.playerKey,
+        entry.nflTeam,
+      ));
     }
     const findings = entry.profile.structuredFindings;
     const requiresWholeTeam =

@@ -212,13 +212,22 @@ describe("DraftSession integration", () => {
     const stub = env.DRAFT_SESSION.getByName(draftKey);
     await stub.initializeDraft(init(draftKey));
     await stub.publishResearch(researchPublication(draftKey), crypto.randomUUID(), new Date().toISOString());
+    const original = researchPublication(draftKey).profiles[0]!;
     const invalid = researchPublication(draftKey, {
       publicationId: "research-2026-08-27-2",
-      profiles: [{ ...researchPublication(draftKey).profiles[0]!, playerKey: "espn:999" }],
+      profiles: [{
+        ...original,
+        profile: {
+          ...original.profile,
+          position: "WR",
+          researchedRole: "rotational-receiver",
+          structuredFindings: { position: "WR" },
+        },
+      }],
     });
     await runInDurableObject(stub, async (instance) => {
       await expect(instance.publishResearch(invalid, crypto.randomUUID(), new Date().toISOString()))
-        .rejects.toThrow("invalid_research_player_key");
+        .rejects.toThrow("invalid_research_player_identity");
     });
     expect((await stub.getSnapshot()).research?.publicationId).toBe("research-2026-08-27-1");
   });
@@ -606,6 +615,24 @@ describe("Worker route security", () => {
         "content-type": "application/json",
         "X-Draft-Timestamp": Math.floor(Date.now() / 1000).toString(),
         "X-Draft-Nonce": "00000000-0000-4000-8000-000000000031",
+        "X-Draft-Signature": `v1=${"0".repeat(64)}`,
+      },
+      body,
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ error: "body_too_large" });
+  });
+
+  it("rejects research publications larger than the relay import bound", async () => {
+    const draftKey = "route-research-body-limit";
+    const pathname = `/api/v1/drafts/${draftKey}/research`;
+    const body = "x".repeat(5 * 1024 * 1024 + 1);
+    const response = await SELF.fetch(`http://worker.test${pathname}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-Draft-Timestamp": Math.floor(Date.now() / 1000).toString(),
+        "X-Draft-Nonce": "00000000-0000-4000-8000-000000000032",
         "X-Draft-Signature": `v1=${"0".repeat(64)}`,
       },
       body,

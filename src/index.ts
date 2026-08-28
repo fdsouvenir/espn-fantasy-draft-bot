@@ -18,7 +18,7 @@ type CompanionAdminRoute = { deviceId: string; action: "revoke" | "enable" };
 
 const MAX_REGISTRATION_BYTES = 4 * 1024;
 const MAX_SELECTION_BYTES = 1024;
-const MAX_RESEARCH_BYTES = 2 * 1024 * 1024;
+const MAX_RESEARCH_BYTES = 5 * 1024 * 1024;
 
 const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": "default-src 'self'; connect-src 'self' wss:; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
