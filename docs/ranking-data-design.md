@@ -134,6 +134,14 @@ remain, compare the user's roster needs, and hide drafted players. Any future re
 that changes ordering must be separately specified, replay-tested, and visible to the user. It may
 not emerge accidentally from Sheet fields.
 
+The War Room presentation uses a deliberately small, visible decision rule. `Next Up` shows one
+candidate for an open roster need, one scarce researched role, and one objective ESPN ADP fall.
+It excludes stale, unpublished, taxonomy-gap, and incomplete profiles. Position tabs group players
+by the published inventory bucket; within the same bucket they order by workload security, team
+offense scoring band, research confidence, and finally ESPN ADP. The interface states this order,
+shows why each player appears, and keeps uncertain profiles in a separate `Role uncertain` section.
+This presentation order does not mutate `pickNowScore` or the ranking engine.
+
 ## 7. Freshness and uncertainty
 
 Suggested refresh cadence for Verl:

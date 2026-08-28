@@ -4,13 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
-    <meta name="theme-color" content="#090d12">
+    <meta name="theme-color" content="#080c10">
     <title>Draftside War Room</title>
     <link rel="stylesheet" href="./styles.css">
     <script src="./app.js" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#available-title">Skip to available players</a>
+    <a class="skip-link" href="#workspace-title">Skip to draft decisions</a>
+
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">DS</span>
@@ -20,7 +21,7 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <div id="clock" class="draft-clock" role="timer" aria-label="Time until the managed team picks">
+        <div class="draft-clock" role="timer" aria-label="Time until the managed team picks">
           <span class="clock-label">Pick clock</span>
           <strong id="pick-clock">--:--</strong>
         </div>
@@ -51,84 +52,29 @@
 
       <div id="alert-region" class="alert-stack" aria-live="assertive"></div>
 
-      <section class="inventory-section" aria-labelledby="inventory-title">
-        <div class="inventory-heading">
-          <div>
-            <p class="eyebrow">Role inventory</p>
-            <h2 id="inventory-title">What is actually left?</h2>
-          </div>
-          <div class="filter-group" role="toolbar" aria-label="Filter the War Room by position">
-            <button class="filter-button is-active" type="button" data-position="ALL" aria-pressed="true">All</button>
-            <button class="filter-button" type="button" data-position="RB" aria-pressed="false">RB</button>
-            <button class="filter-button" type="button" data-position="WR" aria-pressed="false">WR</button>
-            <button class="filter-button" type="button" data-position="TE" aria-pressed="false">TE</button>
-            <button class="filter-button" type="button" data-position="QB" aria-pressed="false">QB</button>
-            <button class="filter-button" type="button" data-position="K" aria-pressed="false">K</button>
-            <button class="filter-button" type="button" data-position="D/ST" aria-pressed="false">D/ST</button>
-          </div>
+      <section class="control-deck" aria-label="War Room controls">
+        <div id="decision-tabs" class="decision-tabs" aria-label="Decision views" role="tablist">
+          <button class="decision-tab is-active" type="button" role="tab" data-tab="NEXT" aria-selected="true">Next Up</button>
+          <button class="decision-tab" type="button" role="tab" data-tab="RB" aria-selected="false">RB</button>
+          <button class="decision-tab" type="button" role="tab" data-tab="WR" aria-selected="false">WR</button>
+          <button class="decision-tab" type="button" role="tab" data-tab="TE" aria-selected="false">TE</button>
+          <button class="decision-tab" type="button" role="tab" data-tab="QB" aria-selected="false">QB</button>
+          <button class="decision-tab" type="button" role="tab" data-tab="K" aria-selected="false">K</button>
+          <button class="decision-tab" type="button" role="tab" data-tab="D/ST" aria-selected="false">D/ST</button>
         </div>
-        <div id="inventory-list" class="inventory-list" aria-live="polite"></div>
+        <div id="roster-summary" class="roster-summary" aria-live="polite"></div>
       </section>
 
-      <div class="war-room-grid">
-        <section class="board-panel" aria-labelledby="available-title">
-          <div class="panel-heading board-heading">
-            <div>
-              <p class="eyebrow">Available now</p>
-              <h2 id="available-title">ESPN order, Verl context</h2>
-            </div>
-            <p id="research-coverage" class="section-note">Waiting for research publication.</p>
+      <section id="workspace" class="workspace" aria-labelledby="workspace-title" aria-live="polite">
+        <header class="workspace-heading">
+          <div>
+            <p id="workspace-eyebrow" class="eyebrow">Decision brief</p>
+            <h2 id="workspace-title">Next Up</h2>
           </div>
-          <section class="table-scroll" aria-label="Scrollable available players table">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">ADP</th>
-                  <th scope="col">Player</th>
-                  <th scope="col">Researched role</th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody id="available-body"></tbody>
-            </table>
-          </section>
-          <p id="available-empty" class="empty-state" hidden>No available players match this lens.</p>
-        </section>
-
-        <aside class="context-rail" aria-label="Decision and roster context">
-          <section id="research-inspector" class="research-inspector" aria-labelledby="inspector-title" aria-live="polite">
-            <p class="eyebrow">Research brief</p>
-            <h2 id="inspector-title">Select a player</h2>
-            <p class="empty-copy">Choose an available player to see Verl’s conclusion and evidence.</p>
-          </section>
-
-          <section class="roster-panel" aria-labelledby="roster-title">
-            <div class="panel-heading">
-              <div><p class="eyebrow">Your team</p><h2 id="roster-title">Roster &amp; needs</h2></div>
-              <span id="roster-count" class="count-badge">0</span>
-            </div>
-            <div id="needs-list" class="needs-list"></div>
-            <ol id="roster-list" class="roster-list"></ol>
-          </section>
-
-          <section class="return-panel" aria-labelledby="return-title">
-            <div class="panel-heading">
-              <div><p class="eyebrow">Next turn · 256 simulations</p><h2 id="return-title">Wait risk</h2></div>
-            </div>
-            <ul id="return-list" class="return-list"></ul>
-          </section>
-
-          <section class="companion-panel" aria-labelledby="companion-title">
-            <div class="panel-heading">
-              <div><p class="eyebrow">Draft laptop</p><h2 id="companion-title">Companion</h2></div>
-              <span id="companion-status" class="count-badge">Checking</span>
-            </div>
-            <div id="companion-devices" class="companion-devices">
-              <p class="section-note">Draftside connects automatically when the laptop app opens.</p>
-            </div>
-          </section>
-        </aside>
-      </div>
+          <p id="workspace-note" class="workspace-note">Roster fit, vanishing roles, and objective market falls.</p>
+        </header>
+        <div id="workspace-content" class="workspace-content"></div>
+      </section>
     </main>
 
     <footer>

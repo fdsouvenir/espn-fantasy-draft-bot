@@ -12,15 +12,13 @@
     connectionPill: document.querySelector("#connection-pill"),
     connectionLabel: document.querySelector("#connection-label"),
     alertRegion: document.querySelector("#alert-region"),
-    inventoryList: document.querySelector("#inventory-list"),
-    researchCoverage: document.querySelector("#research-coverage"),
-    availableBody: document.querySelector("#available-body"),
-    availableEmpty: document.querySelector("#available-empty"),
-    inspector: document.querySelector("#research-inspector"),
-    rosterList: document.querySelector("#roster-list"),
-    rosterCount: document.querySelector("#roster-count"),
-    needsList: document.querySelector("#needs-list"),
-    returnList: document.querySelector("#return-list"),
+    decisionTabs: document.querySelector("#decision-tabs"),
+    rosterSummary: document.querySelector("#roster-summary"),
+    workspace: document.querySelector("#workspace"),
+    workspaceEyebrow: document.querySelector("#workspace-eyebrow"),
+    workspaceTitle: document.querySelector("#workspace-title"),
+    workspaceNote: document.querySelector("#workspace-note"),
+    workspaceContent: document.querySelector("#workspace-content"),
     pickLabel: document.querySelector("#pick-label"),
     roundLabel: document.querySelector("#round-label"),
     progressCopy: document.querySelector("#progress-copy"),
@@ -39,9 +37,9 @@
 
   const app = {
     snapshot: null,
-    position: "ALL",
-    bucket: null,
-    selectedPlayerId: null,
+    activeTab: "NEXT",
+    expandedPlayerId: null,
+    expandedBuckets: new Set(),
     socket: null,
     reconnectAttempt: 0,
     reconnectTimer: null,
@@ -150,6 +148,8 @@
       adp: number(raw.adp ?? raw.averageDraftPosition, 0),
       providerRole: raw.roleClass ?? raw.depthRole ?? "unknown",
       researchBucket: raw.researchInventoryBucket ?? null,
+      scoringBand: raw.researchOffenseScoringBand ?? raw.researchProfile?.additionalFindings?.offenseScoringBand ?? "unknown",
+      teamNotes: raw.researchTeamNotes ?? raw.researchProfile?.additionalFindings?.teamNotes ?? "",
       profile,
       returnProbability: returnProbability === undefined || returnProbability === null
         ? null
@@ -219,6 +219,7 @@
         totalPicks,
         round: number(draft.round ?? raw.currentRound, 0),
         roundPick: number(draft.roundPick ?? raw.roundPick, 0),
+        expectedTeams: number(draft.expectedTeams ?? raw.expectedTeams, 12),
         nextTeamPick: draft.nextTeamPick ?? team.nextPick ?? raw.nextTeamPick ?? null,
         picksAway: draft.picksAway ?? team.picksAway ?? null,
         pickClockSeconds: draft.pickClockSeconds ?? raw.pickClockSeconds ?? null,
@@ -258,145 +259,10 @@
     else if (snapshot.health.stale) showAlert("warning", "The ESPN ingestor is stale. Verify availability in ESPN.");
     const warningCount = snapshot.research?.warnings?.length ?? 0;
     if (warningCount > 0) {
-      showAlert("research", `${warningCount} research exception${warningCount === 1 ? "" : "s"} remain visible as needs-review; Verl’s labels were not changed.`);
+      showAlert("research", `${warningCount} research exception${warningCount === 1 ? "" : "s"} are isolated under Role uncertain and excluded from Next Up.`);
     }
   }
 
-  function positionPlayers(players) {
-    return players.filter((player) => app.position === "ALL" || player.position === app.position);
-  }
-
-  function inventoryKey(player) {
-    if (!player.profile || !player.researchBucket) return `${player.position}::Unresearched`;
-    return `${player.position}::${player.researchBucket}`;
-  }
-
-  function filteredPlayers(players) {
-    return positionPlayers(players)
-      .filter((player) => !app.bucket || inventoryKey(player) === app.bucket)
-      .sort((left, right) => {
-        const leftAdp = left.adp > 0 ? left.adp : Number.POSITIVE_INFINITY;
-        const rightAdp = right.adp > 0 ? right.adp : Number.POSITIVE_INFINITY;
-        return leftAdp - rightAdp || left.rank - right.rank || left.name.localeCompare(right.name);
-      });
-  }
-
-  function renderInventory(players) {
-    const scoped = positionPlayers(players);
-    const counts = new Map();
-    for (const player of scoped) counts.set(inventoryKey(player), (counts.get(inventoryKey(player)) ?? 0) + 1);
-    if (app.bucket && !counts.has(app.bucket)) app.bucket = null;
-    dom.inventoryList.replaceChildren();
-    const allButton = node("button", `inventory-item${app.bucket === null ? " is-active" : ""}`);
-    allButton.type = "button";
-    allButton.dataset.bucket = "";
-    allButton.append(node("strong", "inventory-count", scoped.length), node("span", "inventory-label", "All available"));
-    dom.inventoryList.append(allButton);
-    [...counts.entries()]
-      .sort(([leftKey, leftCount], [rightKey, rightCount]) => rightCount - leftCount || leftKey.localeCompare(rightKey))
-      .forEach(([key, count]) => {
-        const [position, bucket] = key.split("::");
-        const button = node("button", `inventory-item${app.bucket === key ? " is-active" : ""}`);
-        button.type = "button";
-        button.dataset.bucket = key;
-        const label = app.position === "ALL" ? `${position} · ${bucket}` : bucket;
-        button.append(node("strong", "inventory-count", count), node("span", "inventory-label", label));
-        dom.inventoryList.append(button);
-      });
-  }
-
-  function profileStatus(player) {
-    const profile = player.profile;
-    if (!profile) return { label: "Unresearched", detail: "No Verl profile", className: "status-muted" };
-    if (profile.researchState === "stale" || isExpired(profile)) {
-      return { label: "Stale", detail: timeAgo(profile.expiresAt, "Expired"), className: "status-warn" };
-    }
-    if (
-      profile.publicationStatus === "needs-review" ||
-      profile.taxonomyState === "taxonomy-gap" ||
-      profile.researchState !== "complete"
-    ) {
-      const detail = profile.taxonomyState === "taxonomy-gap"
-        ? profile.taxonomyState
-        : profile.researchState !== "complete"
-          ? profile.researchState
-          : profile.publicationStatus;
-      return { label: "Review", detail: titleCase(detail), className: "status-warn" };
-    }
-    return {
-      label: titleCase(profile.confidence),
-      detail: timeAgo(profile.researchedAt, "Researched"),
-      className: profile.confidence === "low" || profile.confidence === "unknown" ? "status-warn" : "status-good",
-    };
-  }
-
-  function selectPlayer(playerId) {
-    app.selectedPlayerId = playerId;
-    renderAvailable(app.snapshot.available);
-    renderInspector(app.snapshot.available);
-  }
-
-  function renderAvailable(players) {
-    const filtered = filteredPlayers(players).slice(0, 60);
-    dom.availableBody.replaceChildren();
-    dom.availableEmpty.hidden = filtered.length > 0;
-    if (!filtered.some((player) => player.id === app.selectedPlayerId)) {
-      app.selectedPlayerId = filtered[0]?.id ?? null;
-    }
-    for (const player of filtered) {
-      const row = document.createElement("tr");
-      row.tabIndex = 0;
-      row.className = player.id === app.selectedPlayerId ? "is-selected" : "";
-      row.setAttribute("aria-selected", String(player.id === app.selectedPlayerId));
-      row.addEventListener("click", () => selectPlayer(player.id));
-      row.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          selectPlayer(player.id);
-        }
-      });
-      row.append(node("td", "adp-cell", player.adp ? player.adp.toFixed(1) : "—"));
-      const playerCell = node("td", "player-cell");
-      playerCell.append(node("strong", "", player.name), node("small", "", `${player.position} · ${player.team}`));
-      row.append(playerCell);
-      const roleCell = node("td", "research-role-cell");
-      if (player.profile) {
-        roleCell.append(
-          node("strong", "", titleCase(player.profile.role ?? "Unresolved role")),
-          node("small", "", player.profile.headline),
-        );
-      } else {
-        roleCell.append(
-          node("strong", "unresearched-label", "Not researched"),
-          node("small", "", `Provider depth context: ${titleCase(player.providerRole)}`),
-        );
-      }
-      row.append(roleCell);
-      const status = profileStatus(player);
-      const statusCell = node("td", `status-cell ${status.className}`);
-      statusCell.append(node("strong", "", status.label), node("small", "", status.detail));
-      row.append(statusCell);
-      dom.availableBody.append(row);
-    }
-    const researched = filtered.filter((player) => player.profile).length;
-    const publication = app.snapshot.research;
-    dom.researchCoverage.textContent = publication
-      ? `${researched} of ${filtered.length} in this lens · publication ${publication.researchRevision}`
-      : `${researched} of ${filtered.length} in this lens · no published batch`;
-  }
-
-  function appendInspectorSection(parent, label, copy) {
-    if (!copy) return;
-    const section = node("section", "brief-section");
-    section.append(node("h3", "brief-label", label), node("p", "brief-copy", copy));
-    parent.append(section);
-  }
-
-  function inspectorHeading(text) {
-    const heading = node("h2", "", text);
-    heading.id = "inspector-title";
-    return heading;
-  }
 
   function formatFinding(key, value) {
     if (value && typeof value === "object" && Number.isFinite(value.low) && Number.isFinite(value.high)) {
@@ -407,149 +273,430 @@
     return titleCase(value);
   }
 
-  function renderFindings(profile) {
-    const findings = Object.entries(profile.findings)
-      .filter(([key, value]) => key !== "position" && value !== undefined && value !== null)
-      .slice(0, 8);
-    if (!findings.length) return null;
-    const section = node("section", "brief-section findings-section");
-    section.append(node("h3", "brief-label", "Structured findings"));
-    const grid = node("dl", "finding-grid");
-    for (const [key, value] of findings) {
-      grid.append(node("dt", "", titleCase(key)), node("dd", "", formatFinding(key, value)));
+
+  const ROLE_GROUPS = {
+    RB: ["Actual starter", "Committee lead", "Committee partner", "Specialist", "Contingent", "Reserve"],
+    WR: ["Target leader", "Volume role", "Full-time secondary", "Specialist", "Rotation"],
+    TE: ["Receiving difference-maker", "Stable route volume", "Committee lead", "Specialist", "Blocking risk", "Rotation", "Contingent"],
+    QB: ["Locked starter", "Fragile starter", "Competition", "Contingent", "Reserve"],
+    K: ["Secure job", "Competition", "Temporary", "No job"],
+    "D/ST": ["Every-week unit", "Pressure upside", "Volatile", "Streamer", "Matchup only", "Low ceiling"],
+  };
+
+  const POSITION_COPY = {
+    RB: ["Running backs", "Starting jobs, committee reality, receiving work, and who actually owns the backfield."],
+    WR: ["Wide receivers", "Team target hierarchy first: clear No. 1s, stable volume, secondary roles, and specialists."],
+    TE: ["Tight ends", "Routes and receiving priority matter more than nominal starter status."],
+    QB: ["Quarterbacks", "Job security, start probability, and the fantasy value of the role around them."],
+    K: ["Kickers", "Job security first. Do not spend an early pick on a replaceable role."],
+    "D/ST": ["Defenses", "Disruption and opening-week usability, separated from low-ceiling name value."],
+  };
+
+  function profileIsUncertain(player) {
+    const profile = player.profile;
+    return !profile || !player.researchBucket || profile.publicationStatus !== "published" ||
+      profile.taxonomyState !== "matched" || profile.researchState !== "complete" || isExpired(profile);
+  }
+
+  function bucketFor(player) {
+    return profileIsUncertain(player) ? "Role uncertain" : player.researchBucket;
+  }
+
+  function confidenceScore(player) {
+    return { high: 3, medium: 2, low: 1, unknown: 0 }[player.profile?.confidence] ?? 0;
+  }
+
+  function securityScore(player) {
+    const findings = player.profile?.findings ?? {};
+    const competition = { settled: 4, leaning: 2, open: 0, unknown: 1 }[findings.competitionStatus] ?? 1;
+    const leash = { stable: 3, moderate: 2, fragile: 0, unknown: 1 }[findings.starterLeash] ?? 1;
+    const rank = [findings.backfieldRank, findings.teamTargetRank, findings.teRoomRank]
+      .find((value) => typeof value === "number");
+    const hierarchy = rank === 1 ? 3 : rank === 2 ? 2 : rank ? 1 : 0;
+    return competition + leash + hierarchy;
+  }
+
+  function environmentScore(player) {
+    return { strong: 3, average: 2, weak: 1, unknown: 0 }[player.scoringBand] ?? 0;
+  }
+
+  function adpValue(player) {
+    return player.adp > 0 ? player.adp : Number.POSITIVE_INFINITY;
+  }
+
+  function compareWithinRole(left, right) {
+    return securityScore(right) - securityScore(left) ||
+      environmentScore(right) - environmentScore(left) ||
+      confidenceScore(right) - confidenceScore(left) ||
+      adpValue(left) - adpValue(right) || left.name.localeCompare(right.name);
+  }
+
+  function roleIndex(player) {
+    const groups = ROLE_GROUPS[player.position] ?? [];
+    const index = groups.indexOf(bucketFor(player));
+    return index === -1 ? groups.length + 1 : index;
+  }
+
+  function needPriority(snapshot, position) {
+    const need = snapshot.needs.find((candidate) => {
+      const value = typeof candidate === "string" ? candidate : candidate.position ?? candidate.slot;
+      return String(value).toUpperCase() === position;
+    });
+    if (!need) return 1;
+    const priority = String(typeof need === "string" ? "open" : need.priority ?? need.status ?? "open").toLowerCase();
+    if (["urgent", "high", "open"].includes(priority)) return 0;
+    return ["met", "filled"].includes(priority) ? 2 : 1;
+  }
+
+  function inventoryCounts(players, position = null) {
+    const counts = new Map();
+    for (const player of players) {
+      if (position && player.position !== position) continue;
+      const key = `${player.position}::${bucketFor(player)}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
-    section.append(grid);
+    return counts;
+  }
+
+  function decisionCompare(snapshot, counts) {
+    return (left, right) => needPriority(snapshot, left.position) - needPriority(snapshot, right.position) ||
+      roleIndex(left) - roleIndex(right) ||
+      (counts.get(`${left.position}::${bucketFor(left)}`) ?? 99) -
+        (counts.get(`${right.position}::${bucketFor(right)}`) ?? 99) ||
+      compareWithinRole(left, right);
+  }
+
+  function whyHere(player) {
+    return player.profile?.draftImplication || player.profile?.headline ||
+      "The role is unresolved; verify the current team situation before relying on it.";
+  }
+
+  function injuryConcern(player) {
+    const copy = player.profile?.availability?.trim() ?? "";
+    if (!copy) return "";
+    const benign = /^(available and participating|healthy|full participant|available\.?$|no (?:current )?(?:injury|availability) concern)/i;
+    const concerning = /(questionable|doubtful|limited|injur|shoulder|ankle|hamstring|knee|concussion|pup|missed|absence|rehab|no-contact|not cleared|out\b)/i;
+    return concerning.test(copy) && !benign.test(copy) ? copy : "";
+  }
+
+  function scoringBandCopy(player) {
+    return {
+      strong: "Strong scoring environment",
+      average: "Average scoring environment",
+      weak: "Weak scoring environment",
+      unknown: "Scoring environment unconfirmed",
+    }[player.scoringBand] ?? "Scoring environment unconfirmed";
+  }
+
+  function competitionLabel(player) {
+    const status = player.profile?.findings?.competitionStatus;
+    if (status && status !== "unknown") return `${titleCase(status)} competition`;
+    return player.profile?.competition ? "Competition mapped" : "Competition unclear";
+  }
+
+  function detailSection(label, copy) {
+    if (!copy) return null;
+    const section = node("section", "detail-section");
+    section.append(node("h4", "detail-label", label), node("p", "detail-copy", copy));
     return section;
   }
 
-  function renderInspector(players) {
-    const player = players.find((candidate) => candidate.id === app.selectedPlayerId);
-    dom.inspector.replaceChildren();
-    dom.inspector.classList.remove("inspector-enter");
-    void dom.inspector.offsetWidth;
-    dom.inspector.classList.add("inspector-enter");
-    dom.inspector.append(node("p", "eyebrow", "Research brief"));
-    if (!player) {
-      dom.inspector.append(inspectorHeading("No player selected"));
-      dom.inspector.append(node("p", "empty-copy", "Choose an available player to inspect Verl’s conclusion."));
-      return;
-    }
-    const identity = node("div", "inspector-identity");
-    const title = node("div", "");
-    title.append(
-      inspectorHeading(player.name),
-      node("p", "player-meta", `${player.position} · ${player.team} · ESPN ADP ${player.adp ? player.adp.toFixed(1) : "—"}`),
-    );
-    identity.append(title);
-    dom.inspector.append(identity);
+  function renderPlayerDetail(player) {
+    const detail = node("div", "player-detail");
     const profile = player.profile;
     if (!profile) {
-      dom.inspector.append(node("span", "role-badge is-muted", "Not researched"));
-      dom.inspector.append(node("p", "empty-copy", "Verl has not published a profile for this player. The War Room will not invent one."));
-      appendInspectorSection(dom.inspector, "Provider context", titleCase(player.providerRole));
-      return;
+      detail.append(node("p", "uncertain-copy", "No published role profile is attached. The War Room keeps this player visible without inventing a conclusion."));
+      return detail;
     }
-    const status = profileStatus(player);
-    const badgeRow = node("div", "badge-row");
-    badgeRow.append(
-      node("span", "role-badge", titleCase(profile.role ?? "Unresolved role")),
-      node("span", `confidence-badge ${status.className}`, status.label),
-    );
-    dom.inspector.append(badgeRow);
-    dom.inspector.append(node("p", "profile-headline", profile.headline));
-    if (profile.draftImplication) {
-      const callout = node("div", "decision-callout");
-      callout.append(node("span", "callout-label", "Draft implication"), node("p", "", profile.draftImplication));
-      dom.inspector.append(callout);
+    const grid = node("div", "detail-grid");
+    [
+      detailSection("Current role", profile.currentRole),
+      detailSection("Opportunity", profile.opportunity),
+      detailSection("Competition", profile.competition),
+      detailSection("Team situation", player.teamNotes || scoringBandCopy(player)),
+      injuryConcern(player) ? detailSection("Availability concern", profile.availability) : null,
+      profile.contingency
+        ? detailSection(`Contingency · ${titleCase(profile.contingency.researchedRole ?? "unresolved")}`, `${profile.contingency.summary} Trigger: ${profile.contingency.trigger}`)
+        : null,
+      profile.confidence === "low" || profile.confidence === "unknown"
+        ? detailSection("Confidence exception", profile.confidenceReason || "The published conclusion remains low confidence.")
+        : null,
+      profile.unresolved.length ? detailSection("Still unresolved", profile.unresolved.join(" · ")) : null,
+    ].filter(Boolean).forEach((section) => {
+      grid.append(section);
+    });
+    detail.append(grid);
+
+    const findings = Object.entries(profile.findings)
+      .filter(([key, value]) => key !== "position" && value !== undefined && value !== null)
+      .slice(0, 8);
+    if (findings.length) {
+      const strip = node("dl", "finding-strip");
+      for (const [key, value] of findings) {
+        const item = node("div", "finding-item");
+        item.append(node("dt", "", titleCase(key)), node("dd", "", formatFinding(key, value)));
+        strip.append(item);
+      }
+      detail.append(strip);
     }
-    appendInspectorSection(dom.inspector, "Current role", profile.currentRole);
-    appendInspectorSection(dom.inspector, "Opportunity", profile.opportunity);
-    appendInspectorSection(dom.inspector, "Competition", profile.competition);
-    appendInspectorSection(dom.inspector, "Availability", profile.availability);
-    if (profile.contingency) {
-      const trigger = String(profile.contingency.trigger ?? "").trim();
-      const summary = String(profile.contingency.summary ?? "").trim();
-      const contingencyCopy = trigger && summary && trigger !== summary
-        ? `${trigger}: ${summary}`
-        : trigger || summary;
-      appendInspectorSection(
-        dom.inspector,
-        `Contingency · ${titleCase(profile.contingency.researchedRole ?? "Unresolved")}`,
-        contingencyCopy,
-      );
-    }
-    const findings = renderFindings(profile);
-    if (findings) dom.inspector.append(findings);
-    if (profile.unresolved.length) {
-      appendInspectorSection(dom.inspector, "Still unresolved", profile.unresolved.join(" · "));
-    }
-    appendInspectorSection(dom.inspector, `${titleCase(profile.confidence)} confidence`, profile.confidenceReason);
-    const evidence = node("section", "brief-section evidence-section");
-    evidence.append(node("h3", "brief-label", "Evidence"));
-    const meta = node("p", "evidence-meta", `${profile.supportingIds.length} supporting · ${profile.contradictingIds.length} contradicting · ${timeAgo(profile.researchedAt, "researched")}`);
-    evidence.append(meta);
+
+    const evidence = node("div", "evidence-row");
+    evidence.append(node("span", "evidence-meta", `${profile.supportingIds.length} supporting · ${profile.contradictingIds.length} contradicting · ${timeAgo(profile.researchedAt, "Researched")}`));
     if (profile.sources.length) {
       const links = node("div", "source-links");
-      profile.sources.slice(0, 6).forEach((url, index) => {
+      profile.sources.slice(0, 4).forEach((url, index) => {
         const link = node("a", "source-link", `Source ${index + 1}`);
         link.href = url;
         link.target = "_blank";
-        link.rel = "noopener noreferrer";
+        link.rel = "noreferrer noopener";
         links.append(link);
       });
       evidence.append(links);
     }
-    dom.inspector.append(evidence);
+    detail.append(evidence);
+    return detail;
   }
 
-  function renderRoster(roster, needs) {
-    dom.rosterCount.textContent = roster.length;
-    dom.rosterList.replaceChildren();
-    dom.needsList.replaceChildren();
-    const normalizedNeeds = needs.length
-      ? needs
-      : ["QB", "RB", "WR", "TE"].map((position) => ({ position, priority: "open" }));
-    for (const rawNeed of normalizedNeeds) {
-      const need = typeof rawNeed === "string" ? { position: rawNeed, priority: "open" } : rawNeed;
-      const priority = String(need.priority ?? need.status ?? "open").toLowerCase();
-      const className = priority === "urgent" || priority === "high"
-        ? " is-urgent"
-        : priority === "met" || priority === "filled" ? " is-met" : "";
-      dom.needsList.append(node("span", `need-chip${className}`, `${need.position ?? need.slot ?? "FLEX"} · ${priority}`));
-    }
-    if (!roster.length) {
-      dom.rosterList.append(node("li", "empty-state", "No managed-team picks yet."));
-      return;
-    }
-    for (const player of roster) {
-      const item = node("li", "roster-item");
-      item.append(node("span", "roster-pos", player.position));
-      const identity = node("div", "");
-      identity.append(node("div", "roster-name", player.name));
-      identity.append(node("div", "roster-team", `${player.team}${player.byeWeek ? ` · Bye ${player.byeWeek}` : ""}`));
-      item.append(identity, node("span", "roster-pick", player.pick ? `#${player.pick}` : "Keeper"));
-      dom.rosterList.append(item);
-    }
+  function renderDepthStrip(player) {
+    const depth = node("div", "depth-strip");
+    depth.setAttribute("aria-label", `${player.team} depth-chart context`);
+    const role = profileIsUncertain(player) ? "Role unresolved" : titleCase(player.profile?.role);
+    depth.append(
+      node("span", "depth-node is-player", role),
+      node("span", "depth-arrow", "→"),
+      node("span", "depth-node", competitionLabel(player)),
+    );
+    return depth;
   }
 
-  function renderReturns(players) {
-    dom.returnList.replaceChildren();
-    const usable = positionPlayers(players)
-      .filter((player) => player.returnProbability !== null)
-      .sort((left, right) => left.returnProbability - right.returnProbability)
-      .slice(0, 5);
-    if (!usable.length) {
-      dom.returnList.append(node("li", "empty-state", "No return estimates in this lens."));
-      return;
+  function renderPlayerRow(player, options = {}) {
+    const expanded = app.expandedPlayerId === player.id;
+    const row = node("article", `player-row${expanded ? " is-expanded" : ""}${options.compact ? " is-compact" : ""}`);
+    const summary = node("button", "player-summary");
+    summary.type = "button";
+    summary.dataset.expandPlayer = player.id;
+    summary.setAttribute("aria-expanded", String(expanded));
+
+    const identity = node("div", "player-identity");
+    identity.append(node("strong", "player-name", player.name));
+    const meta = node("div", "player-meta");
+    meta.append(node("span", "position-chip", player.position), node("span", "", player.team));
+    if (player.profile?.role && !profileIsUncertain(player)) meta.append(node("span", "role-code", titleCase(player.profile.role)));
+    identity.append(meta);
+
+    const why = node("div", "why-block");
+    why.append(node("span", "row-label", options.label ?? "Why here"), node("p", "why-copy", whyHere(player)));
+
+    const situation = node("div", "situation-block");
+    situation.append(renderDepthStrip(player));
+    situation.append(node("p", "situation-copy", `${scoringBandCopy(player)}. ${player.profile?.competition || "Team competition is not resolved in the published profile."}`));
+
+    const exceptions = node("div", "exception-stack");
+    const injury = injuryConcern(player);
+    if (injury) exceptions.append(node("span", "exception-chip is-injury", "Injury concern"));
+    if (profileIsUncertain(player)) exceptions.append(node("span", "exception-chip is-uncertain", "Role uncertain"));
+    else if (["low", "unknown"].includes(player.profile?.confidence)) exceptions.append(node("span", "exception-chip is-uncertain", `${titleCase(player.profile.confidence)} confidence`));
+    exceptions.append(node("span", "expand-mark", expanded ? "−" : "+"));
+
+    summary.append(identity, why, situation, exceptions);
+    row.append(summary);
+    if (expanded) row.append(renderPlayerDetail(player));
+    return row;
+  }
+
+  function scarcityCopy(count) {
+    if (count === 0) return "None left";
+    if (count === 1) return "Last one";
+    if (count <= 3) return `Only ${count} left`;
+    return `${count} available`;
+  }
+
+  function renderRosterSummary(snapshot) {
+    const counts = new Map();
+    for (const player of snapshot.roster) counts.set(player.position, (counts.get(player.position) ?? 0) + 1);
+    const roster = node("div", "roster-line");
+    roster.append(node("span", "summary-label", "Your roster"));
+    if (!snapshot.roster.length) roster.append(node("strong", "", "Empty"));
+    else ["QB", "RB", "WR", "TE", "K", "D/ST"].filter((position) => counts.has(position))
+      .forEach((position) => {
+        roster.append(node("span", "roster-count", `${position} ${counts.get(position)}`));
+      });
+
+    const needs = node("div", "needs-line");
+    needs.append(node("span", "summary-label", "Open needs"));
+    const openNeeds = snapshot.needs.filter((rawNeed) => {
+      const priority = String(typeof rawNeed === "string" ? "open" : rawNeed.priority ?? rawNeed.status ?? "open").toLowerCase();
+      return !["met", "filled"].includes(priority);
+    });
+    if (!openNeeds.length) needs.append(node("strong", "", "Best role available"));
+    else openNeeds.forEach((rawNeed) => {
+      const position = typeof rawNeed === "string" ? rawNeed : rawNeed.position ?? rawNeed.slot ?? "FLEX";
+      const priority = String(typeof rawNeed === "string" ? "open" : rawNeed.priority ?? rawNeed.status ?? "open").toLowerCase();
+      needs.append(node("span", `need-chip${["urgent", "high"].includes(priority) ? " is-urgent" : ""}`, position));
+    });
+    dom.rosterSummary.replaceChildren(roster, needs);
+  }
+
+  function renderDecisionCard(kind, player, rationale, count) {
+    const card = node("section", `decision-card decision-${kind.toLowerCase().replaceAll(" ", "-")}`);
+    const heading = node("header", "decision-card-heading");
+    const copy = node("div", "");
+    copy.append(node("p", "decision-kicker", kind), node("h3", "", player ? player.name : "No qualified signal"));
+    heading.append(copy);
+    if (player) heading.append(node("span", "decision-role", `${player.position} · ${bucketFor(player)}`));
+    card.append(heading, node("p", "decision-rationale", rationale));
+    if (player) {
+      const facts = node("div", "decision-facts");
+      facts.append(node("span", "", `${count} in this role`), node("span", "", scoringBandCopy(player)));
+      if (injuryConcern(player)) facts.append(node("span", "decision-risk", "Injury concern"));
+      card.append(facts, renderPlayerRow(player, { compact: true, label: "Why this player" }));
     }
-    for (const player of usable) {
-      const item = node("li", "return-item");
-      const identity = node("div", "");
-      identity.append(node("span", "return-name", player.name));
-      identity.append(node("span", "return-meta", `${player.position} · ${player.researchBucket ?? "unresearched"}`));
-      item.append(identity, node("span", "return-value", `${player.returnProbability}%`));
-      dom.returnList.append(item);
+    return card;
+  }
+
+  function renderNextUp(snapshot) {
+    dom.workspaceEyebrow.textContent = "Decision brief";
+    dom.workspaceTitle.textContent = "Next Up";
+    dom.workspaceNote.textContent = "Three transparent signals. No hidden value score and no duplicate ESPN queue.";
+    const players = snapshot.available.filter((player) => ["QB", "RB", "WR", "TE", "K", "D/ST"].includes(player.position));
+    const usable = players.filter((player) => !profileIsUncertain(player));
+    const counts = inventoryCounts(players);
+    const compare = decisionCompare(snapshot, counts);
+
+    const rosterFit = [...usable].sort(compare)[0] ?? null;
+    const excluded = new Set(rosterFit ? [rosterFit.id] : []);
+    const scarcity = [...usable]
+      .filter((player) => {
+        const bucketKey = `${player.position}::${bucketFor(player)}`;
+        const rosterFitKey = rosterFit ? `${rosterFit.position}::${bucketFor(rosterFit)}` : null;
+        return !excluded.has(player.id) && bucketKey !== rosterFitKey && (counts.get(bucketKey) ?? 99) <= 3;
+      })
+      .sort((left, right) => {
+        const leftCount = counts.get(`${left.position}::${bucketFor(left)}`) ?? 99;
+        const rightCount = counts.get(`${right.position}::${bucketFor(right)}`) ?? 99;
+        return needPriority(snapshot, left.position) - needPriority(snapshot, right.position) ||
+          roleIndex(left) - roleIndex(right) || leftCount - rightCount || compareWithinRole(left, right);
+      })[0] ?? null;
+    if (scarcity) excluded.add(scarcity.id);
+    const currentPick = snapshot.draft.currentPick ?? 0;
+    const marketFall = [...usable]
+      .filter((player) => !excluded.has(player.id) && player.adp > 0 && currentPick - player.adp >= 6)
+      .sort((left, right) => (currentPick - right.adp) - (currentPick - left.adp) || compare(left, right))[0] ?? null;
+
+    const primary = node("div", "decision-grid");
+    const fitCount = rosterFit ? counts.get(`${rosterFit.position}::${bucketFor(rosterFit)}`) ?? 0 : 0;
+    primary.append(renderDecisionCard(
+      "Roster fit",
+      rosterFit,
+      rosterFit
+        ? `${rosterFit.position} is still open on your roster; this is the strongest researched role remaining at that need.`
+        : "No published role currently clears the roster-fit rule. Use a position tab before drafting.",
+      fitCount,
+    ));
+    const scarcityCount = scarcity ? counts.get(`${scarcity.position}::${bucketFor(scarcity)}`) ?? 0 : 0;
+    primary.append(renderDecisionCard(
+      "Scarcity alert",
+      scarcity,
+      scarcity
+        ? `${scarcityCopy(scarcityCount)} in the ${bucketFor(scarcity).toLowerCase()} tier; the next role step-down is materially different.`
+        : "No distinct high-priority role is down to three or fewer players right now.",
+      scarcityCount,
+    ));
+    const marketCount = marketFall ? counts.get(`${marketFall.position}::${bucketFor(marketFall)}`) ?? 0 : 0;
+    primary.append(renderDecisionCard(
+      "Market fall",
+      marketFall,
+      marketFall
+        ? `Still available ${Math.floor(currentPick - marketFall.adp)} picks after ESPN ADP. The role is shown so the fall is not mistaken for opportunity.`
+        : "No researched player is at least six picks past ESPN ADP after the first two signals are removed.",
+      marketCount,
+    ));
+
+    const alternatives = node("section", "alternatives-section");
+    const heading = node("header", "section-heading");
+    const headingCopy = node("div", "");
+    headingCopy.append(node("p", "eyebrow", "Cross-check"), node("h3", "", "Best researched role by position"));
+    heading.append(headingCopy, node("p", "section-note", "Role strength → security → offense → confidence. ESPN ADP breaks ties only."));
+    alternatives.append(heading);
+    const rows = node("div", "alternative-rows");
+    for (const position of ["RB", "WR", "TE", "QB", "K", "D/ST"]) {
+      const best = usable.filter((player) => player.position === position)
+        .sort((left, right) => roleIndex(left) - roleIndex(right) || compareWithinRole(left, right))[0];
+      if (best) rows.append(renderPlayerRow(best, { label: `${bucketFor(best)} · ${scarcityCopy(counts.get(`${position}::${bucketFor(best)}`) ?? 0)}` }));
     }
+    if (!rows.childElementCount) rows.append(node("p", "empty-state", "No published role profiles are available yet."));
+    alternatives.append(rows);
+    dom.workspaceContent.replaceChildren(primary, alternatives);
+  }
+
+  function renderRoleLedger(groups) {
+    const ledger = node("div", "role-ledger");
+    for (const [bucket, players] of groups) {
+      const item = node("div", `ledger-item${players.length <= 1 ? " is-scarce" : ""}${players.length === 0 ? " is-empty" : ""}`);
+      item.append(node("strong", "", players.length), node("span", "", bucket));
+      ledger.append(item);
+    }
+    return ledger;
+  }
+
+  function renderPosition(snapshot, position) {
+    const [title, note] = POSITION_COPY[position];
+    dom.workspaceEyebrow.textContent = "Role board";
+    dom.workspaceTitle.textContent = title;
+    dom.workspaceNote.textContent = note;
+    const players = snapshot.available.filter((player) => player.position === position);
+    const bucketNames = [...ROLE_GROUPS[position]];
+    for (const player of players) {
+      const bucket = bucketFor(player);
+      if (!bucketNames.includes(bucket)) bucketNames.push(bucket);
+    }
+    if (!bucketNames.includes("Role uncertain")) bucketNames.push("Role uncertain");
+    const groups = bucketNames.map((bucket) => [bucket, players.filter((player) => bucketFor(player) === bucket).sort(compareWithinRole)]);
+
+    const board = node("div", "position-board");
+    board.append(renderRoleLedger(groups));
+    board.append(node("p", "ordering-rule", "Within a role: workload security → team scoring environment → research confidence → ESPN ADP only as a final tiebreak."));
+
+    const sections = node("div", "role-sections");
+    groups.forEach(([bucket, members], index) => {
+      if (!members.length && index !== 0) return;
+      const section = node("section", `role-section${bucket === "Role uncertain" ? " is-uncertain" : ""}`);
+      const header = node("header", "role-heading");
+      const copy = node("div", "");
+      copy.append(node("h3", "", bucket), node("p", "", scarcityCopy(members.length)));
+      header.append(copy, node("span", `role-count${members.length <= 1 ? " is-scarce" : ""}`, members.length));
+      section.append(header);
+      if (!members.length) {
+        section.append(node("p", "role-empty", `No ${bucket.toLowerCase()} players remain. If this is the role you need, waiting cannot restore it.`));
+      } else {
+        const rows = node("div", "player-rows");
+        const bucketKey = `${position}::${bucket}`;
+        const expanded = app.expandedBuckets.has(bucketKey);
+        const visibleMembers = expanded ? members : members.slice(0, 12);
+        visibleMembers.forEach((player) => {
+          rows.append(renderPlayerRow(player));
+        });
+        if (members.length > 12) {
+          const showMore = node("button", "show-more", expanded ? "Show fewer" : `Show ${members.length - 12} more ${bucket.toLowerCase()}`);
+          showMore.type = "button";
+          showMore.dataset.expandBucket = bucketKey;
+          rows.append(showMore);
+        }
+        section.append(rows);
+      }
+      sections.append(section);
+    });
+    if (!players.length) sections.append(node("p", "empty-state", `No available ${position} players are attached to this draft snapshot.`));
+    board.append(sections);
+    dom.workspaceContent.replaceChildren(board);
+  }
+
+  function renderWorkspace(snapshot) {
+    dom.workspace.classList.remove("workspace-enter");
+    void dom.workspace.offsetWidth;
+    dom.workspace.classList.add("workspace-enter");
+    if (app.activeTab === "NEXT") renderNextUp(snapshot);
+    else renderPosition(snapshot, app.activeTab);
   }
 
   function renderProgress(snapshot) {
@@ -591,11 +738,8 @@
     else if (!mockMode && snapshot.health.stale) setConnection("stale", "Ingestor stale");
     else if (!mockMode && app.socket?.readyState === WebSocket.OPEN) setConnection("connected");
     renderAlerts(snapshot);
-    renderInventory(snapshot.available);
-    renderAvailable(snapshot.available);
-    renderInspector(snapshot.available);
-    renderRoster(snapshot.roster, snapshot.needs);
-    renderReturns(snapshot.likelyToReturn);
+    renderRosterSummary(snapshot);
+    renderWorkspace(snapshot);
     renderProgress(snapshot);
     dom.revisionLabel.textContent = `Revision ${snapshot.revision}`;
     dom.buildLabel.textContent = snapshot.build;
@@ -752,33 +896,35 @@
     }
   }
 
-  document.querySelectorAll(".filter-button[data-position]").forEach((button) => {
-    button.addEventListener("click", () => {
-      app.position = button.dataset.position;
-      app.bucket = null;
-      app.selectedPlayerId = null;
-      document.querySelectorAll(".filter-button[data-position]").forEach((candidate) => {
-        const active = candidate === button;
-        candidate.classList.toggle("is-active", active);
-        candidate.setAttribute("aria-pressed", String(active));
-      });
-      if (app.snapshot) {
-        renderInventory(app.snapshot.available);
-        renderAvailable(app.snapshot.available);
-        renderInspector(app.snapshot.available);
-        renderReturns(app.snapshot.likelyToReturn);
-      }
+  dom.decisionTabs.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-tab]");
+    if (!button || !app.snapshot) return;
+    app.activeTab = button.dataset.tab;
+    app.expandedPlayerId = null;
+    app.expandedBuckets.clear();
+    dom.decisionTabs.querySelectorAll("button[data-tab]").forEach((candidate) => {
+      const active = candidate === button;
+      candidate.classList.toggle("is-active", active);
+      candidate.setAttribute("aria-selected", String(active));
     });
+    renderWorkspace(app.snapshot);
   });
 
-  dom.inventoryList.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-bucket]");
+  dom.workspaceContent.addEventListener("click", (event) => {
+    const bucketButton = event.target.closest("button[data-expand-bucket]");
+    if (bucketButton && app.snapshot) {
+      const bucketKey = bucketButton.dataset.expandBucket;
+      if (app.expandedBuckets.has(bucketKey)) app.expandedBuckets.delete(bucketKey);
+      else app.expandedBuckets.add(bucketKey);
+      renderWorkspace(app.snapshot);
+      return;
+    }
+    const button = event.target.closest("button[data-expand-player]");
     if (!button || !app.snapshot) return;
-    app.bucket = button.dataset.bucket || null;
-    app.selectedPlayerId = null;
-    renderInventory(app.snapshot.available);
-    renderAvailable(app.snapshot.available);
-    renderInspector(app.snapshot.available);
+    app.expandedPlayerId = app.expandedPlayerId === button.dataset.expandPlayer
+      ? null
+      : button.dataset.expandPlayer;
+    renderWorkspace(app.snapshot);
   });
 
   function mockProfile(position, role, overrides = {}) {
@@ -810,7 +956,10 @@
       contradictingObservationIds: [],
       sourceUrls: ["https://example.com/sample-source-1", "https://example.com/sample-source-2"],
       structuredFindings: { position },
-      additionalFindings: {},
+      additionalFindings: {
+        offenseScoringBand: "average",
+        teamNotes: "The published team snapshot confirms the current first-team hierarchy and its primary competition.",
+      },
       researchedAt,
       classifiedAt,
       expiresAt,

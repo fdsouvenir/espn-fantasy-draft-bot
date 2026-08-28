@@ -7,8 +7,9 @@ The repository intentionally separates shipped behavior from future work.
 - Read-only draft-room frame observation through local Chrome DevTools Protocol.
 - Signed, idempotent ingestion into a SQLite-backed Durable Object.
 - Gap, duplicate, conflict, reconnect, and stale-ingestor handling.
-- Half-screen War Room organized around Verl-authored role inventory, ESPN-order availability, and
-  a focused evidence inspector.
+- Half-screen War Room with a roster-aware Next Up brief, role-first position tabs, live scarcity,
+  team situation, and inline evidence details. ESPN ADP appears only as market context or a final
+  tiebreak inside the same researched role.
 - Atomic, independently signed research publication with versioned profiles, team closure,
   last-known-good retention, audit warnings, and no effect on deterministic ranking scores.
 - Live Google Sheet research database with strict shared fields, six position schemas, team
