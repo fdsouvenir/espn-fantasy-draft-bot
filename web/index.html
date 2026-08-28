@@ -20,7 +20,25 @@
           <h1>Draftside</h1>
         </div>
       </div>
+
+      <section class="header-draft" aria-labelledby="draft-progress-title">
+        <div class="header-pick">
+          <p class="eyebrow" id="draft-progress-title">Live draft</p>
+          <p><strong id="pick-label">Loading board…</strong> <span id="round-label"></span></p>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-meta"><span id="progress-copy">Waiting for snapshot</span><span id="last-sync">—</span></div>
+          <div class="progress-track" role="progressbar" aria-label="Draft completion" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="progress-fill"></span>
+          </div>
+        </div>
+      </section>
+
       <div class="topbar-actions">
+        <div class="next-pick">
+          <span>Your team picks</span>
+          <strong id="next-pick">—</strong>
+        </div>
         <div class="draft-clock" role="timer" aria-label="Time until the managed team picks">
           <span class="clock-label">Pick clock</span>
           <strong id="pick-clock">--:--</strong>
@@ -33,23 +51,6 @@
     </header>
 
     <main id="main">
-      <section class="draft-strip" aria-labelledby="draft-progress-title">
-        <div class="draft-strip-copy">
-          <p class="eyebrow" id="draft-progress-title">Live draft</p>
-          <p><strong id="pick-label">Loading board…</strong> <span id="round-label"></span></p>
-        </div>
-        <div class="progress-wrap">
-          <div class="progress-meta"><span id="progress-copy">Waiting for snapshot</span><span id="last-sync">—</span></div>
-          <div class="progress-track" role="progressbar" aria-label="Draft completion" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <span id="progress-fill"></span>
-          </div>
-        </div>
-        <div class="next-pick">
-          <span>Your team picks</span>
-          <strong id="next-pick">—</strong>
-        </div>
-      </section>
-
       <div id="alert-region" class="alert-stack" aria-live="assertive"></div>
 
       <section class="control-deck" aria-label="War Room controls">
