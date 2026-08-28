@@ -62,6 +62,10 @@ export type CatalogPlayerV1 = {
   researchProfile?: ResearchProfileV2;
   /** Presentation-only grouping derived from researchedRole. */
   researchInventoryBucket?: string;
+  /** Presentation-only team context from Verl's matching Team Snapshot. */
+  researchOffenseScoringBand?: OffenseScoringBand;
+  /** Presentation-only depth-chart and team-situation note from Verl. */
+  researchTeamNotes?: string;
 };
 
 export type ResearchFindingValue = string | number | boolean | null | string[];

@@ -334,18 +334,34 @@ export class DraftSession extends DurableObject<Env> {
           JSON.parse(row.profile_json) as NonNullable<CatalogPlayerV1["researchProfile"]>,
         ]),
     );
-    const hasPublishedResearch = this.researchMeta() !== null;
+    const researchRow = this.researchMeta();
+    const publication = researchRow
+      ? JSON.parse(researchRow.publication_json) as ResearchPublicationV1
+      : null;
+    const teamResearch = new Map(
+      (publication?.teamSnapshots ?? []).map((snapshot) => [snapshot.nflTeam, snapshot]),
+    );
+    const hasPublishedResearch = researchRow !== null;
     const catalog = this.catalog().map((player) => {
       const profile = publishedProfiles.get(player.playerId) ??
         (hasPublishedResearch ? undefined : player.researchProfile);
       if (!profile) {
-        const { researchProfile: _profile, researchInventoryBucket: _bucket, ...withoutResearch } = player;
+        const {
+          researchProfile: _profile,
+          researchInventoryBucket: _bucket,
+          researchOffenseScoringBand: _scoringBand,
+          researchTeamNotes: _teamNotes,
+          ...withoutResearch
+        } = player;
         return withoutResearch;
       }
+      const teamSnapshot = teamResearch.get(player.nflTeam);
       return {
         ...player,
         researchProfile: profile,
         researchInventoryBucket: researchInventoryBucket(player.position, profile.researchedRole) ?? undefined,
+        researchOffenseScoringBand: teamSnapshot?.offenseScoringBand,
+        researchTeamNotes: teamSnapshot?.notes,
       };
     });
     const context = this.context();
@@ -383,7 +399,7 @@ export class DraftSession extends DurableObject<Env> {
       recommendations: health.hasGap || health.conflictCount > 0 || health.stale
         ? []
         : available.slice(0, 3),
-      research: this.researchSnapshot(),
+      research: this.researchSnapshot(researchRow, publication),
       health,
       pinnedCatalogVersion: meta.pinned_catalog_version,
       serverTime: new Date().toISOString(),
@@ -445,18 +461,20 @@ export class DraftSession extends DurableObject<Env> {
       .toArray()[0] ?? null;
   }
 
-  private researchSnapshot(): ResearchSnapshotV1 | null {
-    const row = this.researchMeta();
+  private researchSnapshot(
+    row: ResearchMetaRow | null = this.researchMeta(),
+    publication?: ResearchPublicationV1 | null,
+  ): ResearchSnapshotV1 | null {
     if (!row) return null;
-    const publication = JSON.parse(row.publication_json) as ResearchPublicationV1;
+    const resolvedPublication = publication ?? JSON.parse(row.publication_json) as ResearchPublicationV1;
     return {
-      publicationId: publication.publicationId,
+      publicationId: resolvedPublication.publicationId,
       researchRevision: row.research_revision,
-      roleVocabularyVersion: publication.roleVocabularyVersion,
-      rubricVersion: publication.rubricVersion,
-      publishedAt: publication.publishedAt,
-      publishedBy: publication.publishedBy,
-      profileCount: publication.profiles.length,
+      roleVocabularyVersion: resolvedPublication.roleVocabularyVersion,
+      rubricVersion: resolvedPublication.rubricVersion,
+      publishedAt: resolvedPublication.publishedAt,
+      publishedBy: resolvedPublication.publishedBy,
+      profileCount: resolvedPublication.profiles.length,
       warnings: JSON.parse(row.warnings_json) as ResearchSnapshotV1["warnings"],
     };
   }
@@ -614,7 +632,7 @@ export class DraftSession extends DurableObject<Env> {
   }
 
   private researchAck(row: ResearchMetaRow, changed: boolean): ResearchPublicationAckV1 {
-    const snapshot = this.researchSnapshot();
+    const snapshot = this.researchSnapshot(row);
     if (!snapshot) throw new Error("research_publication_missing");
     return {
       publicationId: row.publication_id,

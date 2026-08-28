@@ -204,6 +204,8 @@ describe("DraftSession integration", () => {
     expect(snapshot.research).toMatchObject({ publicationId: publication.publicationId, profileCount: 1 });
     expect(afterPlayer.researchProfile?.researchedRole).toBe("clear-lead");
     expect(afterPlayer.researchInventoryBucket).toBe("Actual starter");
+    expect(afterPlayer.researchOffenseScoringBand).toBe("average");
+    expect(afterPlayer.researchTeamNotes).toBe("Pilot");
     expect(afterPlayer.pickNowScore).toBe(beforePlayer.pickNowScore);
   });
 
