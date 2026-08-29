@@ -14,6 +14,35 @@ from urllib.parse import parse_qs, urlparse
 
 import websocket
 
+DOM_BOARD_EXPRESSION = r"""(() => {
+  const elements = [
+    document.querySelector('.completedPick'),
+    document.querySelector('.draftContainer'),
+    document.body,
+  ].filter(Boolean);
+  for (const element of elements) {
+    const internalKey = Object.getOwnPropertyNames(element).find(
+      (key) => key.startsWith('__reactInternalInstance$') || key.startsWith('__reactFiber$')
+    );
+    let fiber = internalKey ? element[internalKey] : null;
+    for (let depth = 0; fiber && depth < 30; depth += 1, fiber = fiber.return) {
+      for (const props of [fiber.pendingProps, fiber.memoizedProps]) {
+        const picks = props?.store?.draft?.picks;
+        if (!Array.isArray(picks)) continue;
+        return picks
+          .filter((pick) => pick && pick.playerId !== -1)
+          .map((pick) => ({
+            pickNumber: pick.pickNumber,
+            teamId: pick.teamId,
+            playerId: pick.playerId,
+            slotId: pick.slotId,
+          }));
+      }
+    }
+  }
+  return null;
+})()"""
+
 
 class DraftRoomNotFoundError(RuntimeError):
     """Raised while Chrome is open but no ESPN draft-room tab is available."""
@@ -25,6 +54,45 @@ class DraftRoomAmbiguousError(RuntimeError):
     def __init__(self, identities: list[DraftRoomIdentity | None]):
         super().__init__("multiple ESPN draft-room tabs are open")
         self.identities = identities
+
+
+def validated_dom_picks(value: Any) -> list[dict[str, int]] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or len(value) > 1000:
+        raise ValueError("invalid DOM draft board")
+    picks = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise TypeError("invalid DOM draft pick")
+        pick_number = item.get("pickNumber")
+        team_id = item.get("teamId")
+        player_id = item.get("playerId")
+        slot_id = item.get("slotId")
+        if (
+            type(pick_number) is not int
+            or not 1 <= pick_number <= 1000
+            or type(team_id) is not int
+            or not 1 <= team_id <= 10**9
+            or type(player_id) is not int
+            or not -(10**9) <= player_id <= 10**9
+            or player_id == -1
+            or type(slot_id) is not int
+            or not 0 <= slot_id <= 100
+        ):
+            raise ValueError("invalid DOM draft pick")
+        picks.append(
+            {
+                "pickNumber": pick_number,
+                "teamId": team_id,
+                "playerId": player_id,
+                "slotId": slot_id,
+            }
+        )
+    picks.sort(key=lambda pick: pick["pickNumber"])
+    if [pick["pickNumber"] for pick in picks] != list(range(1, len(picks) + 1)):
+        raise ValueError("DOM draft picks are not contiguous")
+    return picks
 
 
 @dataclass(frozen=True)
@@ -178,19 +246,55 @@ class FrameSource:
         self.socket = connector(debugger_endpoint, timeout=5, suppress_origin=True)
         self.request_id, self.frames = 0, []
         self.tracked_requests: set[str] = set()
+        self.last_dom_poll = 0.0
+        self.last_dom_signature: tuple[tuple[int, int, int, int], ...] | None = None
         self._command("Network.enable")
         if reload_page:
             self._command("Page.reload", {"ignoreCache": False})
 
-    def _command(self, method: str, params: dict[str, Any] | None = None) -> None:
+    def _command(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         self.request_id += 1
         request_id = self.request_id
         self.socket.send(json.dumps({"id": request_id, "method": method, "params": params or {}}))
         while True:
             response = json.loads(self.socket.recv())
             if response.get("id") == request_id:
-                return
+                return response
             self._record(response)
+
+    def _poll_dom_board(self) -> None:
+        now = time.monotonic()
+        if now - self.last_dom_poll < 0.75:
+            return
+        self.last_dom_poll = now
+        try:
+            response = self._command(
+                "Runtime.evaluate",
+                {"expression": DOM_BOARD_EXPRESSION, "returnByValue": True},
+            )
+        except websocket.WebSocketTimeoutException:
+            return
+        value = (
+            response.get("result", {}).get("result", {}).get("value")
+        )
+        picks = validated_dom_picks(value)
+        if picks is None:
+            return
+        signature = tuple(
+            (
+                pick["pickNumber"],
+                pick["teamId"],
+                pick["playerId"],
+                pick["slotId"],
+            )
+            for pick in picks
+        )
+        if signature == self.last_dom_signature:
+            return
+        self.last_dom_signature = signature
+        self.frames.append({"at": round(time.time() * 1000), "picks": picks})
 
     def _record(self, response: dict[str, Any]) -> None:
         method, params = response.get("method"), response.get("params", {})
@@ -241,6 +345,7 @@ class FrameSource:
             except websocket.WebSocketTimeoutException:
                 continue
             self._record(response)
+        self._poll_dom_board()
         frames, self.frames = self.frames, []
         return frames
 

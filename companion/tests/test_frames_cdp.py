@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from draft_companion.cdp import FrameSource, launch_chrome
+from draft_companion.cdp import FrameSource, launch_chrome, validated_dom_picks
 from draft_companion.frames import DecodeError, raw_board, selected_frame
 
 
@@ -22,6 +22,31 @@ def test_raw_board_only_treats_minus_one_as_empty():
     picks = {1: {"teamId": 4, "playerId": 101}, 2: {"teamId": 3, "playerId": -16007}}
     detail = raw_board(init, picks, False)["draftDetail"]
     assert [pick["playerId"] for pick in detail["picks"]] == [101, -16007, -1, -1]
+
+
+def test_dom_board_validation_preserves_numeric_pick_identity():
+    value = [
+        {"pickNumber": 2, "teamId": 3, "playerId": -16007, "slotId": 16},
+        {"pickNumber": 1, "teamId": 4, "playerId": 101, "slotId": 2},
+    ]
+    assert validated_dom_picks(value) == [
+        {"pickNumber": 1, "teamId": 4, "playerId": 101, "slotId": 2},
+        {"pickNumber": 2, "teamId": 3, "playerId": -16007, "slotId": 16},
+    ]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        [{"pickNumber": 2, "teamId": 3, "playerId": 101, "slotId": 2}],
+        [{"pickNumber": 1, "teamId": 0, "playerId": 101, "slotId": 2}],
+        [{"pickNumber": 1, "teamId": 3, "playerId": -1, "slotId": 2}],
+        [{"pickNumber": True, "teamId": 3, "playerId": 101, "slotId": 2}],
+    ],
+)
+def test_dom_board_validation_rejects_invalid_or_noncontiguous_picks(value):
+    with pytest.raises(ValueError):
+        validated_dom_picks(value)
 
 
 class FakeSocket:

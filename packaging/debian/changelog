@@ -1,3 +1,9 @@
+draftside-companion (0.4.4-1) unstable; urgency=medium
+
+  * Recover and follow live picks from ESPN's rendered draft store when no socket opens.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Fri, 28 Aug 2026 14:15:00 -0500
+
 draftside-companion (0.4.3-1) unstable; urgency=medium
 
   * Distinguish ESPN room detection from War Room board registration.

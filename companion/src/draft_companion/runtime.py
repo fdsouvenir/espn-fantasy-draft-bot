@@ -95,6 +95,21 @@ def _draft_identity(draft: Mapping[str, Any]) -> DraftRoomIdentity:
     )
 
 
+def _canonical_dom_picks(
+    dom_picks: list[dict[str, int]], draft_slot_team_ids: list[str]
+) -> dict[int, dict[str, int]]:
+    recovered: dict[int, dict[str, int]] = {}
+    for pick in dom_picks:
+        overall = int(pick["pickNumber"])
+        if overall > len(draft_slot_team_ids):
+            raise ValueError("DOM pick exceeds initialized draft order")
+        recovered[overall] = {
+            **pick,
+            "teamId": int(draft_slot_team_ids[overall - 1]),
+        }
+    return recovered
+
+
 def _draft_options(drafts: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
@@ -474,6 +489,20 @@ class Companion:
                     changed_at = None
                     recovered = False
                     for frame in source.read(0.25):
+                        dom_picks = frame.get("picks")
+                        if isinstance(dom_picks, list):
+                            recovered_picks = _canonical_dom_picks(
+                                dom_picks, init["draftSlotTeamIds"]
+                            )
+                            if len(recovered_picks) < len(self.picks):
+                                continue
+                            for overall, existing in self.picks.items():
+                                if recovered_picks.get(overall) != existing:
+                                    raise RuntimeError("DOM draft board conflicts with prior picks")
+                            self.picks = recovered_picks
+                            recovered = True
+                            changed_at = frame.get("at")
+                            continue
                         message = frame.get("data")
                         if not isinstance(message, str):
                             continue

@@ -90,6 +90,40 @@ def test_runtime_commits_exact_board_and_owner_only_files(tmp_path: Path, monkey
     assert len(FakeWorker.instances[-1].posts) == 2
 
 
+def test_runtime_recovers_complete_board_from_dom_snapshot(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("draft_companion.runtime.signal.signal", lambda *_args: None)
+
+    class DomFrames:
+        def read(self, _wait):
+            return [
+                {
+                    "at": 1200,
+                    "picks": [
+                        {"pickNumber": 1, "teamId": 99, "playerId": 101, "slotId": 2},
+                        {"pickNumber": 2, "teamId": 98, "playerId": -16007, "slotId": 16},
+                    ],
+                }
+            ]
+
+        def close(self):
+            pass
+
+    runtime = Companion(
+        config(tmp_path),
+        frame_factory=lambda *_args: DomFrames(),
+        worker_factory=FakeWorker,
+        credential_loader=lambda *_args: Credentials("h" * 32, "id", "secret"),
+        sleeper=lambda _seconds: None,
+    )
+    runtime.run()
+
+    checkpoint = json.loads((tmp_path / "state/checkpoint.json").read_text())
+    assert [pick["playerId"] for pick in checkpoint["picks"]] == [101, -16007]
+    posted = FakeWorker.instances[-1].posts[0][0]
+    assert [posted[overall]["teamId"] for overall in (1, 2)] == [1, 2]
+    assert len(FakeWorker.instances[-1].posts) == 1
+
+
 def test_health_logs_only_redacted_status_transitions(tmp_path: Path, capsys):
     runtime = Companion(config(tmp_path))
     runtime._health(
