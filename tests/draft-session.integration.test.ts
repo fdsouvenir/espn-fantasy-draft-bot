@@ -260,6 +260,48 @@ describe("DraftSession integration", () => {
     expect((await stub.getHealth()).missingOverallPicks).toEqual([3, 4]);
   });
 
+  it("stores future keepers without advancing the live draft clock", async () => {
+    const draftKey = "future-keeper-clock";
+    const stub = env.DRAFT_SESSION.getByName(draftKey);
+    await stub.initializeDraft({ ...init(draftKey), prefilledPickNumbers: [4] });
+
+    await stub.ingestBatch(
+      batch(draftKey, [pick(4, "101")], { cursor: { lastOverallPick: 1 } }),
+      "00000000-0000-4000-8000-000000000013",
+      "2026-08-11T11:00:02.000Z",
+    );
+    const corrected = await stub.ingestBatch(
+      batch(draftKey, [], { cursor: { lastOverallPick: 0 } }),
+      "00000000-0000-4000-8000-000000000014",
+      "2026-08-11T11:00:03.000Z",
+    );
+
+    expect(corrected).toMatchObject({ lastOverallPick: 0, missingOverallPicks: [] });
+    const snapshot = await stub.getSnapshot();
+    expect(snapshot.draft.current).toBe(1);
+    expect(snapshot.picks.map((event) => event.overallPick)).toEqual([4]);
+    expect(snapshot.available.map((player) => player.playerId)).not.toContain("101");
+  });
+
+  it("rejects a cursor regression across a live pick", async () => {
+    const draftKey = "live-cursor-regression";
+    const stub = env.DRAFT_SESSION.getByName(draftKey);
+    await stub.initializeDraft(init(draftKey));
+    await stub.ingestBatch(
+      batch(draftKey, [pick(1, "101")]),
+      "00000000-0000-4000-8000-000000000015",
+      "2026-08-11T11:00:02.000Z",
+    );
+
+    await runInDurableObject(stub, async (instance) => {
+      await expect(instance.ingestBatch(
+        batch(draftKey, [], { cursor: { lastOverallPick: 0 } }),
+        "00000000-0000-4000-8000-000000000016",
+        "2026-08-11T11:00:03.000Z",
+      )).rejects.toThrow("invalid_cursor");
+    });
+  });
+
   it("rejects an incompatible re-initialization", async () => {
     const draftKey = "init-conflict";
     const stub = env.DRAFT_SESSION.getByName(draftKey);

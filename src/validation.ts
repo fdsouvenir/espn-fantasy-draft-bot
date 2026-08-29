@@ -368,9 +368,6 @@ export function validateIngest(value: unknown): IngestBatchV1 {
   if (events.some((event) => event.overallPick > totalPickSlots)) {
     throw new Error("invalid_overall_pick");
   }
-  if (events.some((event) => event.overallPick > lastOverallPick)) {
-    throw new Error("invalid_cursor");
-  }
   return {
     schemaVersion: 1,
     draftKey: value.draftKey,
@@ -394,6 +391,7 @@ export function validateInit(value: unknown): DraftInitV1 {
   }
   if (!integer(value.expectedTeams, 2, 32) || !integer(value.expectedRounds, 1, 40)) throw new Error("invalid_draft_shape");
   if (!integer(value.totalPickSlots, 1, 1000)) throw new Error("invalid_total_picks");
+  const totalPickSlots = Number(value.totalPickSlots);
   if (value.totalPickSlots !== Number(value.expectedTeams) * Number(value.expectedRounds)) {
     throw new Error("invalid_draft_shape");
   }
@@ -483,6 +481,14 @@ export function validateInit(value: unknown): DraftInitV1 {
     throw new Error("invalid_draft_slot_team_ids");
   }
   if (!value.draftSlotTeamIds.includes(value.managedTeamId)) throw new Error("managed_team_not_in_draft_slots");
+  const prefilledPickNumbers = value.prefilledPickNumbers ?? [];
+  if (
+    !Array.isArray(prefilledPickNumbers)
+    || prefilledPickNumbers.some((pick) => !integer(pick, 1, totalPickSlots))
+    || new Set(prefilledPickNumbers).size !== prefilledPickNumbers.length
+  ) {
+    throw new Error("invalid_prefilled_pick_numbers");
+  }
   if (!isRecord(value.rosterTargets)) throw new Error("invalid_roster_targets");
   const rosterTargets = value.rosterTargets;
   const normalizedTargets: Partial<DraftInitV1["rosterTargets"]> = {};
@@ -500,6 +506,7 @@ export function validateInit(value: unknown): DraftInitV1 {
     totalPickSlots: value.totalPickSlots,
     managedTeamId: value.managedTeamId,
     draftSlotTeamIds: value.draftSlotTeamIds,
+    prefilledPickNumbers: [...prefilledPickNumbers].sort((left, right) => left - right),
     rosterTargets: {
       QB: normalizedTargets.QB!,
       RB: normalizedTargets.RB!,

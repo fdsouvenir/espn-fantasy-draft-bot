@@ -252,6 +252,7 @@ export type DraftInitV1 = {
   totalPickSlots: number;
   managedTeamId: string;
   draftSlotTeamIds: string[];
+  prefilledPickNumbers?: number[];
   rosterTargets: RosterTargetsV1;
   pinnedCatalogVersion: string;
   catalog: CatalogPlayerV1[];

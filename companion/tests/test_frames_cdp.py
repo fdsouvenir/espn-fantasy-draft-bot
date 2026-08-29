@@ -26,19 +26,22 @@ def test_raw_board_only_treats_minus_one_as_empty():
 
 def test_dom_board_validation_preserves_numeric_pick_identity():
     value = [
-        {"pickNumber": 2, "teamId": 3, "playerId": -16007, "slotId": 16},
+        {"pickNumber": 107, "teamId": 3, "playerId": -16007, "slotId": 16},
         {"pickNumber": 1, "teamId": 4, "playerId": 101, "slotId": 2},
     ]
     assert validated_dom_picks(value) == [
         {"pickNumber": 1, "teamId": 4, "playerId": 101, "slotId": 2},
-        {"pickNumber": 2, "teamId": 3, "playerId": -16007, "slotId": 16},
+        {"pickNumber": 107, "teamId": 3, "playerId": -16007, "slotId": 16},
     ]
 
 
 @pytest.mark.parametrize(
     "value",
     [
-        [{"pickNumber": 2, "teamId": 3, "playerId": 101, "slotId": 2}],
+        [
+            {"pickNumber": 2, "teamId": 3, "playerId": 101, "slotId": 2},
+            {"pickNumber": 2, "teamId": 4, "playerId": 102, "slotId": 4},
+        ],
         [{"pickNumber": 1, "teamId": 0, "playerId": 101, "slotId": 2}],
         [{"pickNumber": 1, "teamId": 3, "playerId": -1, "slotId": 2}],
         [{"pickNumber": True, "teamId": 3, "playerId": 101, "slotId": 2}],

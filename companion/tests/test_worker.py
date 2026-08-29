@@ -170,6 +170,7 @@ def test_device_client_enrolls_and_ingests_without_shared_access_credentials():
                         "expectedTeams": 2,
                         "totalPickSlots": 2,
                         "draftSlotTeamIds": ["1", "2"],
+                        "prefilledPickNumbers": [2],
                         "draftUrl": "https://fantasy.espn.com/football/draft",
                     },
                 }
@@ -193,12 +194,19 @@ def test_device_client_enrolls_and_ingests_without_shared_access_credentials():
     assert client.resolve_drafts([{"season": 2026, "leagueId": "1"}])[0]["draftKey"] == "draft:auto"
     assert client.select_draft("draft:auto")[0]["draftKey"] == "draft:auto"
     client.heartbeat(0, 2)
+    client.ingest(
+        {2: {"teamId": 2, "playerId": 101, "round": 1, "roundPick": 2}},
+        2,
+        False,
+        "2026-08-29T20:00:00.000Z",
+    )
 
     assert requests[0].headers["Authorization"] == f"Bearer {device.device_token}"
     assert requests[0].headers["X-draftside-device"] == device.device_id
     assert requests[1].full_url.endswith("/api/v1/companion/resolve")
     assert requests[2].full_url.endswith("/api/v1/companion/select")
     assert requests[3].full_url.endswith("/api/v1/drafts/draft%3Aauto/companion-ingest")
+    assert json.loads(requests[4].data)["cursor"]["lastOverallPick"] == 0
     assert "Cf-access-client-secret" not in requests[3].headers
     assert requests[3].headers["X-draft-signature"].startswith("v1=")
 

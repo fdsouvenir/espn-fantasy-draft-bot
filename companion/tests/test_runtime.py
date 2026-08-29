@@ -10,12 +10,18 @@ from draft_companion.config import ChromeConfig, Config, RuntimeConfig
 from draft_companion.credentials import Credentials
 from draft_companion.runtime import (
     Companion,
+    _contiguous_pick_cursor,
     append_evidence,
     atomic_json,
     ensure_chrome,
     process_alive,
 )
 from draft_companion.worker import WorkerError
+
+
+def test_contiguous_pick_cursor_ignores_future_keeper_slots():
+    assert _contiguous_pick_cursor({107: object(), 114: object()}) == 0
+    assert _contiguous_pick_cursor({1: object(), 2: object(), 107: object()}) == 2
 
 
 def config(tmp_path: Path) -> Config:

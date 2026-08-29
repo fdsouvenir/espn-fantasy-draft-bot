@@ -150,6 +150,13 @@ def _room_payload(identities: list[DraftRoomIdentity | None]) -> list[dict[str, 
     return list(rooms.values())[:8]
 
 
+def _contiguous_pick_cursor(picks: Mapping[int, object]) -> int:
+    cursor = 0
+    while cursor + 1 in picks:
+        cursor += 1
+    return cursor
+
+
 class Companion:
     def __init__(
         self,
@@ -423,6 +430,7 @@ class Companion:
                 "expectedTeams": int(bootstrap["expectedTeams"]),
                 "totalPickSlots": int(bootstrap["totalPickSlots"]),
                 "draftSlotTeamIds": bootstrap["draftSlotTeamIds"],
+                "prefilledPickNumbers": bootstrap["prefilledPickNumbers"],
             }
             self.dashboard_url = (
                 f"{self.config.worker_base}/?{urlencode({'draft': self.draft_key})}"
@@ -477,7 +485,7 @@ class Companion:
                     )
                 reload_draft_room = False
                 last_delivery = time.monotonic()
-                worker.heartbeat(len(self.picks), init["totalPickSlots"])
+                worker.heartbeat(_contiguous_pick_cursor(self.picks), init["totalPickSlots"])
                 self._health(
                     "live",
                     filledPicks=len(self.picks),
@@ -516,7 +524,7 @@ class Companion:
                             selected = selected_frame(message)
                             if selected is None:
                                 continue
-                            overall = len(self.picks) + 1
+                            overall = _contiguous_pick_cursor(self.picks) + 1
                             team, player, slot = selected
                             if overall > init["totalPickSlots"] or str(team) != str(
                                 init["draftSlotTeamIds"][overall - 1]
@@ -536,7 +544,9 @@ class Companion:
                             time.monotonic() - last_delivery
                             >= self.config.runtime.heartbeat_seconds
                         ):
-                            ack = worker.heartbeat(len(self.picks), init["totalPickSlots"])
+                            ack = worker.heartbeat(
+                                _contiguous_pick_cursor(self.picks), init["totalPickSlots"]
+                            )
                             last_delivery = time.monotonic()
                             self._health(
                                 "live",

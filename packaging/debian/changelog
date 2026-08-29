@@ -1,3 +1,9 @@
+draftside-companion (0.4.7-1) unstable; urgency=high
+
+  * Support keeper picks assigned to sparse future draft slots.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Sat, 29 Aug 2026 15:12:00 -0500
+
 draftside-companion (0.4.6-1) unstable; urgency=high
 
   * Open only the War Room board selected by the current companion process.

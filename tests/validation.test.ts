@@ -15,9 +15,9 @@ describe("validateIngest", () => {
     expect(() => validateIngest({ schemaVersion: 1, draftKey: "d", ingestorInstanceId: "test", capturedAt: "2026-08-11T12:00:00.000Z", cursor: { lastOverallPick: 2 }, draftState: { inProgress: true, drafted: false, totalPickSlots: 64 }, events: [event(2), event(1)] })).toThrow("events_not_strictly_ordered");
   });
 
-  it("rejects events beyond the source cursor or declared draft size", () => {
+  it("allows sparse events for context validation but rejects picks beyond draft size", () => {
     const base = { schemaVersion: 1, draftKey: "d", ingestorInstanceId: "test", capturedAt: "2026-08-11T12:00:00.000Z", draftState: { inProgress: true, drafted: false, totalPickSlots: 16 } };
-    expect(() => validateIngest({ ...base, cursor: { lastOverallPick: 0 }, events: [event(1)] })).toThrow("invalid_cursor");
+    expect(validateIngest({ ...base, cursor: { lastOverallPick: 0 }, events: [event(1)] }).events).toHaveLength(1);
     expect(() => validateIngest({ ...base, cursor: { lastOverallPick: 17 }, events: [event(17)] })).toThrow("invalid_overall_pick");
   });
 

@@ -62,6 +62,7 @@ def validated_dom_picks(value: Any) -> list[dict[str, int]] | None:
     if not isinstance(value, list) or len(value) > 1000:
         raise ValueError("invalid DOM draft board")
     picks = []
+    seen_pick_numbers: set[int] = set()
     for item in value:
         if not isinstance(item, dict):
             raise TypeError("invalid DOM draft pick")
@@ -81,6 +82,9 @@ def validated_dom_picks(value: Any) -> list[dict[str, int]] | None:
             or not 0 <= slot_id <= 100
         ):
             raise ValueError("invalid DOM draft pick")
+        if pick_number in seen_pick_numbers:
+            raise ValueError("duplicate DOM draft pick")
+        seen_pick_numbers.add(pick_number)
         picks.append(
             {
                 "pickNumber": pick_number,
@@ -90,8 +94,6 @@ def validated_dom_picks(value: Any) -> list[dict[str, int]] | None:
             }
         )
     picks.sort(key=lambda pick: pick["pickNumber"])
-    if [pick["pickNumber"] for pick in picks] != list(range(1, len(picks) + 1)):
-        raise ValueError("DOM draft picks are not contiguous")
     return picks
 
 

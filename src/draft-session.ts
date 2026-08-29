@@ -52,7 +52,7 @@ type ResearchProfileRow = { player_id: string; profile_json: string };
 
 type PersistedDraftContext = Pick<
   DraftInitV1,
-  "expectedTeams" | "expectedRounds" | "managedTeamId" | "draftSlotTeamIds" | "rosterTargets"
+  "expectedTeams" | "expectedRounds" | "managedTeamId" | "draftSlotTeamIds" | "prefilledPickNumbers" | "rosterTargets"
 >;
 
 function canonicalJson(value: unknown): string {
@@ -146,6 +146,7 @@ export class DraftSession extends DurableObject<Env> {
       expectedRounds: config.expectedRounds,
       managedTeamId: config.managedTeamId,
       draftSlotTeamIds: config.draftSlotTeamIds,
+      prefilledPickNumbers: config.prefilledPickNumbers ?? [],
       rosterTargets: config.rosterTargets,
     };
     this.ctx.storage.transactionSync(() => {
@@ -215,6 +216,19 @@ export class DraftSession extends DurableObject<Env> {
         ? "live"
         : "pre_draft";
     const phaseChanged = meta.status !== nextStatus;
+    const nextCursor = envelope.cursor.lastOverallPick;
+    if (nextCursor < meta.source_cursor_last_overall_pick) {
+      const prefilled = new Set(context.prefilledPickNumbers ?? []);
+      const cursorRegressionCrossesLivePick = this.ctx.storage.sql
+        .exec<{ overall_pick: number }>(
+          "SELECT overall_pick FROM picks WHERE overall_pick > ? AND overall_pick <= ?",
+          nextCursor,
+          meta.source_cursor_last_overall_pick,
+        )
+        .toArray()
+        .some((row) => !prefilled.has(row.overall_pick));
+      if (cursorRegressionCrossesLivePick) throw new Error("invalid_cursor");
+    }
 
     this.ctx.storage.transactionSync(() => {
       this.claimNonce(nonce, receivedAt);
@@ -235,20 +249,20 @@ export class DraftSession extends DurableObject<Env> {
           event.ingestorObservedAt,
         );
       }
-      const changed = fresh.length > 0 || phaseChanged;
+      const changed = fresh.length > 0 || phaseChanged || nextCursor !== meta.source_cursor_last_overall_pick;
       this.ctx.storage.sql.exec(
         `UPDATE draft_meta
          SET revision = revision + ?, status = ?, last_ingest_at = ?,
-             source_cursor_last_overall_pick = MAX(source_cursor_last_overall_pick, ?)
+             source_cursor_last_overall_pick = ?
          WHERE singleton = 1`,
         changed ? 1 : 0,
         nextStatus,
         receivedAt,
-        envelope.cursor.lastOverallPick,
+        nextCursor,
       );
       this.pruneNonces(receivedAt);
     });
-    const changed = fresh.length > 0 || phaseChanged;
+    const changed = fresh.length > 0 || phaseChanged || nextCursor !== meta.source_cursor_last_overall_pick;
 
     const ack = this.ack(fresh.length, deduped);
     if (changed) this.broadcast(ack);
@@ -374,7 +388,7 @@ export class DraftSession extends DurableObject<Env> {
         return player ? [{ ...player, overallPick: pick.overallPick }] : [];
       });
     const needs = this.needs(context, managedRoster);
-    const draft = this.draftClock(meta, context, picks);
+    const draft = this.draftClock(meta, context);
     const health = this.health(meta, picks);
     const available = rankAvailable(catalog, picks, {
       currentPick: draft.current,
@@ -416,6 +430,7 @@ export class DraftSession extends DurableObject<Env> {
     expectedTeams: number;
     totalPickSlots: number;
     draftSlotTeamIds: string[];
+    prefilledPickNumbers: number[];
     draftUrl: string;
   } {
     const meta = this.meta();
@@ -426,6 +441,7 @@ export class DraftSession extends DurableObject<Env> {
       expectedTeams: context.expectedTeams,
       totalPickSlots: meta.total_pick_slots,
       draftSlotTeamIds: context.draftSlotTeamIds,
+      prefilledPickNumbers: context.prefilledPickNumbers ?? [],
       draftUrl: "https://fantasy.espn.com/football/draft",
     };
   }
@@ -544,10 +560,8 @@ export class DraftSession extends DurableObject<Env> {
   private draftClock(
     meta: MetaRow,
     context: PersistedDraftContext,
-    picks: DraftPickEventV1[],
   ): DraftSnapshot["draft"] {
-    const lastStoredPick = picks.at(-1)?.overallPick ?? 0;
-    const lastObservedPick = Math.max(lastStoredPick, meta.source_cursor_last_overall_pick);
+    const lastObservedPick = meta.source_cursor_last_overall_pick;
     const current = lastObservedPick < meta.total_pick_slots ? lastObservedPick + 1 : null;
     if (current === null) {
       return { current: null, round: null, roundPick: null, nextTeamPick: null, picksAway: null };
@@ -565,8 +579,7 @@ export class DraftSession extends DurableObject<Env> {
 
   private health(meta: MetaRow, picks: DraftPickEventV1[]): DraftHealth {
     const selected = new Set(picks.map((pick) => pick.overallPick));
-    const lastStoredPick = picks.at(-1)?.overallPick ?? 0;
-    const lastOverallPick = Math.max(lastStoredPick, meta.source_cursor_last_overall_pick);
+    const lastOverallPick = meta.source_cursor_last_overall_pick;
     const missingOverallPicks = Array.from({ length: lastOverallPick }, (_, index) => index + 1).filter(
       (pick) => !selected.has(pick),
     );
@@ -711,6 +724,7 @@ export class DraftSession extends DurableObject<Env> {
       totalPickSlots: config.totalPickSlots,
       managedTeamId: config.managedTeamId,
       draftSlotTeamIds: config.draftSlotTeamIds,
+      prefilledPickNumbers: config.prefilledPickNumbers ?? [],
       rosterTargets: config.rosterTargets,
       pinnedCatalogVersion: config.pinnedCatalogVersion,
       catalog: [...config.catalog].sort((left, right) => left.playerId.localeCompare(right.playerId)),
@@ -784,7 +798,12 @@ export class DraftSession extends DurableObject<Env> {
     );
     const batchPlayerPicks = new Map<string, number>();
     for (const event of envelope.events) {
-      if (event.overallPick > envelope.cursor.lastOverallPick) throw new Error("invalid_cursor");
+      if (
+        event.overallPick > envelope.cursor.lastOverallPick
+        && !(context.prefilledPickNumbers ?? []).includes(event.overallPick)
+      ) {
+        throw new Error("invalid_cursor");
+      }
       const expectedRound = Math.floor((event.overallPick - 1) / context.expectedTeams) + 1;
       const expectedRoundPick = ((event.overallPick - 1) % context.expectedTeams) + 1;
       if (event.overallPick > meta.total_pick_slots || expectedRound > context.expectedRounds) {

@@ -172,17 +172,26 @@ class WorkerClient:
         self, picks: Mapping[int, Mapping[str, int]], total: int, complete: bool, observed_at: str
     ) -> Mapping[str, Any]:
         events = self._events(picks, observed_at)
+        contiguous_cursor = 0
+        while contiguous_cursor + 1 in picks:
+            contiguous_cursor += 1
         final: Mapping[str, Any] = {}
         parts = [events[i : i + 100] for i in range(0, len(events), 100)] or [[]]
         for index, part in enumerate(parts):
             final_part = index == len(parts) - 1
-            part_cursor = int(part[-1]["overallPick"]) if part else max(picks, default=0)
+            part_cursor = (
+                total
+                if complete and final_part
+                else int(part[-1]["overallPick"])
+                if complete and part
+                else contiguous_cursor
+            )
             payload = {
                 "schemaVersion": 1,
                 "draftKey": self.draft_key,
                 "ingestorInstanceId": self.instance_id,
                 "capturedAt": observed_at,
-                "cursor": {"lastOverallPick": total if complete and final_part else part_cursor},
+                "cursor": {"lastOverallPick": part_cursor},
                 "draftState": {
                     "inProgress": not (complete and final_part),
                     "drafted": complete and final_part,
@@ -247,6 +256,7 @@ class DeviceWorkerClient(WorkerClient):
         uuid4=uuid.uuid4,
     ):
         self.device = credentials
+        self.prefilled_pick_numbers: set[int] = set()
         super().__init__(
             worker_base,
             "",
@@ -292,7 +302,10 @@ class DeviceWorkerClient(WorkerClient):
 
     @staticmethod
     def _validate_bootstrap(value: object) -> Mapping[str, Any]:
-        required = ("draftKey", "expectedTeams", "totalPickSlots", "draftSlotTeamIds", "draftUrl")
+        required = (
+            "draftKey", "expectedTeams", "totalPickSlots", "draftSlotTeamIds",
+            "prefilledPickNumbers", "draftUrl",
+        )
         if not isinstance(value, Mapping) or any(key not in value for key in required):
             raise WorkerError("device_selection_invalid_ack")
         if (
@@ -301,6 +314,13 @@ class DeviceWorkerClient(WorkerClient):
             or not isinstance(value["totalPickSlots"], int)
             or not isinstance(value["draftSlotTeamIds"], list)
             or len(value["draftSlotTeamIds"]) != value["totalPickSlots"]
+            or not isinstance(value["prefilledPickNumbers"], list)
+            or any(
+                isinstance(pick, bool)
+                or not isinstance(pick, int)
+                or not 1 <= pick <= value["totalPickSlots"]
+                for pick in value["prefilledPickNumbers"]
+            )
             or not isinstance(value["draftUrl"], str)
         ):
             raise WorkerError("device_selection_invalid_ack")
@@ -341,6 +361,7 @@ class DeviceWorkerClient(WorkerClient):
         draft = self._validate_draft(result.get("draft"), "selection")
         if bootstrap["draftKey"] != draft_key:
             raise WorkerError("device_selection_invalid_ack")
+        self.prefilled_pick_numbers = set(bootstrap["prefilledPickNumbers"])
         self.draft_key = draft_key
         return bootstrap, draft
 

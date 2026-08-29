@@ -242,6 +242,7 @@ def build_draft_init(
 
     by_overall: dict[int, tuple[int, int, str]] = {}
     seen_round_slots: set[tuple[int, int]] = set()
+    prefilled_pick_numbers: list[int] = []
     for pick in picks:
         if not isinstance(pick, dict):
             raise DraftInitError("every draft pick slot must be an object")
@@ -256,6 +257,8 @@ def build_draft_init(
         if team_id not in team_ids:
             raise DraftInitError(f"draft slot references unknown team: {team_id}")
         by_overall[overall] = (round_id, round_pick, team_id)
+        if pick.get("playerId") not in (None, -1):
+            prefilled_pick_numbers.append(overall)
         seen_round_slots.add((round_id, round_pick))
 
     expected_overalls = list(range(1, total_pick_slots + 1))
@@ -294,6 +297,7 @@ def build_draft_init(
         "totalPickSlots": total_pick_slots,
         "managedTeamId": managed,
         "draftSlotTeamIds": draft_slot_team_ids,
+        "prefilledPickNumbers": sorted(prefilled_pick_numbers),
         "rosterTargets": roster_targets,
         "pinnedCatalogVersion": catalog_version,
         "catalog": catalog,
