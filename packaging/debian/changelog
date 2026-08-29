@@ -1,3 +1,9 @@
+draftside-companion (0.4.6-1) unstable; urgency=high
+
+  * Open only the War Room board selected by the current companion process.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Sat, 29 Aug 2026 12:35:00 -0500
+
 draftside-companion (0.4.5-1) unstable; urgency=high
 
   * Never refresh ESPN's draft room while recovering a read-only stream.

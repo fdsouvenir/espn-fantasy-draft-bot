@@ -19,6 +19,7 @@ from . import __version__
 from .cdp import discover_chrome, list_tabs
 from .config import Config, SetupRequiredError, load_config
 from .credentials import load_credentials, load_or_create_device, store_credentials
+from .dashboard import current_board_url
 from .runtime import Companion, atomic_json, ensure_chrome, load_initializer, process_alive
 from .worker import DeviceWorkerClient, WorkerClient
 
@@ -285,18 +286,15 @@ def main(argv: list[str] | None = None) -> int:
                 health = json.loads(config.health_file.read_text(encoding="utf-8"))
             except (FileNotFoundError, ValueError):
                 health = {}
-            enrolled_url = health.get("dashboardUrl") if isinstance(health, dict) else None
-            url: str | None = (
-                enrolled_url
-                if isinstance(enrolled_url, str)
-                and enrolled_url.startswith("https://")
-                and "draft=" in enrolled_url
-                else (
-                    f"{config.worker_base}/?{urlencode({'draft': config.draft_key})}"
-                    if config.draft_key
-                    else None
-                )
+            pid = _pid(config)
+            active_pid = pid if pid is not None and process_alive(pid) else None
+            url = (
+                current_board_url(health, active_pid)
+                if isinstance(health, dict)
+                else None
             )
+            if url is None and config.draft_key is not None:
+                url = f"{config.worker_base}/?{urlencode({'draft': config.draft_key})}"
             if args.open_browser and url is None:
                 raise RuntimeError("open an ESPN draft room before opening its board")
             if args.open_browser and url is not None and not webbrowser.open(url):

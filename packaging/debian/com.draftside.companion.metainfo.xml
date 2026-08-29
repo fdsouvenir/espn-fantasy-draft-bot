@@ -43,6 +43,11 @@
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.6" date="2026-08-29">
+      <description>
+        <p>Opens the War Room board selected by the current companion process.</p>
+      </description>
+    </release>
     <release version="0.4.5" date="2026-08-29">
       <description>
         <p>Keeps ESPN's live draft room stable while reconnecting the read-only pick stream.</p>

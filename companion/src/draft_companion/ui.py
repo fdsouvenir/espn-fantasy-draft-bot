@@ -5,9 +5,9 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 
 from .config import dashboard_candidate, dashboard_setup_required, write_device_config
+from .dashboard import current_board_url as _current_board_url
 
 SERVICE_UNIT = "draftside-companion-runtime.service"
 LEGACY_SERVICE_UNIT = "draftside-companion.service"
@@ -54,18 +54,24 @@ def _write_draft_selection(draft_key: str) -> None:
             pass
 
 
-def _board_url(value: object) -> str | None:
-    if not isinstance(value, str) or not value.startswith("https://"):
+def _runtime_pid() -> int | None:
+    try:
+        pid = int(
+            _health_path().with_name("companion.pid").read_text(encoding="ascii").strip()
+        )
+        if pid <= 0:
+            return None
+        os.kill(pid, 0)
+        return pid
+    except (FileNotFoundError, PermissionError, ProcessLookupError, ValueError):
         return None
-    parsed = urlparse(value)
-    draft = parse_qs(parsed.query).get("draft", [])
-    return value if len(draft) == 1 and bool(draft[0]) else None
 
 
-def _automatic_board_url(health: dict[str, object], opened_url: str | None) -> str | None:
-    url = _board_url(health.get("dashboardUrl"))
-    selected = health.get("selectedDraft")
-    if url is None or url == opened_url or not isinstance(selected, dict):
+def _automatic_board_url(
+    health: dict[str, object], opened_url: str | None, runtime_pid: int | None
+) -> str | None:
+    url = _current_board_url(health, runtime_pid)
+    if url is None or url == opened_url:
         return None
     return url
 
@@ -323,7 +329,7 @@ def main() -> int:
             outer.append(picker)
 
             def open_dashboard(_button):
-                configured = _board_url(_read_health().get("dashboardUrl"))
+                configured = _current_board_url(_read_health(), _runtime_pid())
                 if configured is not None:
                     Gio.AppInfo.launch_default_for_uri(configured, None)
 
@@ -461,9 +467,12 @@ def main() -> int:
                 state = str(health.get("state", "starting"))
                 if state != "draft_selection_required":
                     selection_pending = False
-                dashboard_url = _board_url(health.get("dashboardUrl"))
+                runtime_pid = _runtime_pid()
+                dashboard_url = _current_board_url(health, runtime_pid)
                 dashboard.set_sensitive(dashboard_url is not None)
-                automatic_url = _automatic_board_url(health, automatically_opened_url)
+                automatic_url = _automatic_board_url(
+                    health, automatically_opened_url, runtime_pid
+                )
                 if automatic_url is not None:
                     automatically_opened_url = automatic_url
                     try:
