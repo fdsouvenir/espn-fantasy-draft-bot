@@ -10,6 +10,7 @@ from draft_companion.config import ChromeConfig, Config, RuntimeConfig
 from draft_companion.credentials import Credentials
 from draft_companion.runtime import (
     Companion,
+    _accepted_recovery,
     _contiguous_pick_cursor,
     append_evidence,
     atomic_json,
@@ -22,6 +23,18 @@ from draft_companion.worker import WorkerError
 def test_contiguous_pick_cursor_ignores_future_keeper_slots():
     assert _contiguous_pick_cursor({107: object(), 114: object()}) == 0
     assert _contiguous_pick_cursor({1: object(), 2: object(), 107: object()}) == 2
+
+
+def test_recovery_ignores_stale_init_frames_and_rejects_conflicts():
+    first = {1: {"playerId": 101}, 2: {"playerId": 102}}
+    assert _accepted_recovery(first, {1: {"playerId": 101}}, "INIT") is None
+    assert _accepted_recovery(first, dict(first), "INIT") == first
+    try:
+        _accepted_recovery(first, {1: {"playerId": 999}, 2: {"playerId": 102}}, "INIT")
+    except RuntimeError as error:
+        assert str(error) == "INIT draft board conflicts with prior picks"
+    else:
+        raise AssertionError("conflicting recovery was accepted")
 
 
 def config(tmp_path: Path) -> Config:

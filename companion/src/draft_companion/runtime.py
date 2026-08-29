@@ -157,6 +157,19 @@ def _contiguous_pick_cursor(picks: Mapping[int, object]) -> int:
     return cursor
 
 
+def _accepted_recovery(
+    existing: Mapping[int, Mapping[str, int]],
+    recovered: dict[int, dict[str, int]],
+    source: str,
+) -> dict[int, dict[str, int]] | None:
+    if len(recovered) < len(existing):
+        return None
+    for overall, pick in existing.items():
+        if recovered.get(overall) != pick:
+            raise RuntimeError(f"{source} draft board conflicts with prior picks")
+    return recovered
+
+
 class Companion:
     def __init__(
         self,
@@ -504,12 +517,10 @@ class Companion:
                             recovered_picks = _canonical_dom_picks(
                                 dom_picks, init["draftSlotTeamIds"]
                             )
-                            if len(recovered_picks) < len(self.picks):
+                            accepted = _accepted_recovery(self.picks, recovered_picks, "DOM")
+                            if accepted is None:
                                 continue
-                            for overall, existing in self.picks.items():
-                                if recovered_picks.get(overall) != existing:
-                                    raise RuntimeError("DOM draft board conflicts with prior picks")
-                            self.picks = recovered_picks
+                            self.picks = accepted
                             recovered = True
                             changed_at = frame.get("at")
                             continue
@@ -518,7 +529,11 @@ class Companion:
                             continue
                         if message.startswith("INIT "):
                             decoded = decode_init_picks(message)
-                            self.picks = {p["pickNumber"]: p for p in decoded}
+                            recovered_picks = {p["pickNumber"]: p for p in decoded}
+                            accepted = _accepted_recovery(self.picks, recovered_picks, "INIT")
+                            if accepted is None:
+                                continue
+                            self.picks = accepted
                             recovered = True
                         else:
                             selected = selected_frame(message)
