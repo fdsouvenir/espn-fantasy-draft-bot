@@ -71,7 +71,7 @@ class FakeSocket:
         pass
 
 
-def test_cdp_attaches_to_matching_tab_and_never_subscribes_to_outbound_frames():
+def test_cdp_attaches_to_matching_tab_and_ignores_transient_socket_selections():
     socket = FakeSocket()
     seen_endpoints = []
     tabs = lambda _port: [
@@ -118,7 +118,7 @@ def test_cdp_attaches_to_matching_tab_and_never_subscribes_to_outbound_frames():
             "params": {"requestId": "espn", "response": {"payloadData": "SELECTED 1 2 3"}},
         }
     )
-    assert [frame["data"] for frame in source.frames] == ["SELECTED 1 2 3"]
+    assert source.frames == []
     assert [item["method"] for item in socket.sent] == ["Network.enable"]
 
 

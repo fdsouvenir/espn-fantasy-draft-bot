@@ -334,9 +334,9 @@ class FrameSource:
             or params.get("requestId") not in self.tracked_requests
         ):
             return
-        payload = params.get("response", {}).get("payloadData")
-        if isinstance(payload, str) and payload.startswith(("INIT ", "SELECTED ")):
-            self.frames.append({"at": round(time.time() * 1000), "data": payload})
+        # ESPN's socket messages describe transient selections as well as
+        # committed picks. The React draft store polled above is the only
+        # authoritative board source; never infer picks from these frames.
 
     def read(self, wait_seconds: float) -> list[dict[str, Any]]:
         deadline = time.monotonic() + wait_seconds
