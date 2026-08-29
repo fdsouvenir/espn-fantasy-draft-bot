@@ -1,4 +1,5 @@
 import { hasInjuryConcern } from "./injury-concern.js";
+import { selectNextUpLanes } from "./next-up.js";
 
 (() => {
   const params = new URLSearchParams(window.location.search);
@@ -340,17 +341,6 @@ import { hasInjuryConcern } from "./injury-concern.js";
     return index === -1 ? groups.length + 1 : index;
   }
 
-  function needPriority(snapshot, position) {
-    const need = snapshot.needs.find((candidate) => {
-      const value = typeof candidate === "string" ? candidate : candidate.position ?? candidate.slot;
-      return String(value).toUpperCase() === position;
-    });
-    if (!need) return 1;
-    const priority = String(typeof need === "string" ? "open" : need.priority ?? need.status ?? "open").toLowerCase();
-    if (["urgent", "high", "open"].includes(priority)) return 0;
-    return ["met", "filled"].includes(priority) ? 2 : 1;
-  }
-
   function inventoryCounts(players, position = null) {
     const counts = new Map();
     for (const player of players) {
@@ -359,14 +349,6 @@ import { hasInjuryConcern } from "./injury-concern.js";
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
-  }
-
-  function decisionCompare(snapshot, counts) {
-    return (left, right) => needPriority(snapshot, left.position) - needPriority(snapshot, right.position) ||
-      roleIndex(left) - roleIndex(right) ||
-      (counts.get(`${left.position}::${bucketFor(left)}`) ?? 99) -
-        (counts.get(`${right.position}::${bucketFor(right)}`) ?? 99) ||
-      compareWithinRole(left, right);
   }
 
   function whyHere(player) {
@@ -558,76 +540,49 @@ import { hasInjuryConcern } from "./injury-concern.js";
   function renderNextUp(snapshot) {
     dom.workspaceEyebrow.textContent = "Decision brief";
     dom.workspaceTitle.textContent = "Next Up";
-    dom.workspaceNote.textContent = "Three transparent signals. No hidden value score and no duplicate ESPN queue.";
+    dom.workspaceNote.textContent = "Compare opportunity lanes, not a 1–3 ranking. Roster fit only suppresses positions you have already covered.";
     const players = snapshot.available.filter((player) => ["QB", "RB", "WR", "TE", "K", "D/ST"].includes(player.position));
     const usable = players.filter((player) => !profileIsUncertain(player));
     const counts = inventoryCounts(players);
-    const compare = decisionCompare(snapshot, counts);
-
-    const rosterFit = [...usable].sort(compare)[0] ?? null;
-    const excluded = new Set(rosterFit ? [rosterFit.id] : []);
-    const scarcity = [...usable]
-      .filter((player) => {
-        const bucketKey = `${player.position}::${bucketFor(player)}`;
-        const rosterFitKey = rosterFit ? `${rosterFit.position}::${bucketFor(rosterFit)}` : null;
-        return !excluded.has(player.id) && bucketKey !== rosterFitKey && (counts.get(bucketKey) ?? 99) <= 3;
-      })
-      .sort((left, right) => {
-        const leftCount = counts.get(`${left.position}::${bucketFor(left)}`) ?? 99;
-        const rightCount = counts.get(`${right.position}::${bucketFor(right)}`) ?? 99;
-        return needPriority(snapshot, left.position) - needPriority(snapshot, right.position) ||
-          roleIndex(left) - roleIndex(right) || leftCount - rightCount || compareWithinRole(left, right);
-      })[0] ?? null;
-    if (scarcity) excluded.add(scarcity.id);
-    const currentPick = snapshot.draft.currentPick ?? 0;
-    const marketFall = [...usable]
-      .filter((player) => !excluded.has(player.id) && player.adp > 0 && currentPick - player.adp >= 6)
-      .sort((left, right) => (currentPick - right.adp) - (currentPick - left.adp) || compare(left, right))[0] ?? null;
+    const compareByRole = (left, right) => roleIndex(left) - roleIndex(right) ||
+      compareWithinRole(left, right);
+    const lanes = selectNextUpLanes(usable, snapshot.needs, compareByRole);
 
     const primary = node("div", "decision-grid");
-    const fitCount = rosterFit ? counts.get(`${rosterFit.position}::${bucketFor(rosterFit)}`) ?? 0 : 0;
+    const backfieldCount = lanes.backfield
+      ? counts.get(`${lanes.backfield.position}::${bucketFor(lanes.backfield)}`) ?? 0
+      : 0;
     primary.append(renderDecisionCard(
-      "Roster fit",
-      rosterFit,
-      rosterFit
-        ? `${rosterFit.position} is still open on your roster; this is the strongest researched role remaining at that need.`
-        : "No published role currently clears the roster-fit rule. Use a position tab before drafting.",
-      fitCount,
+      "Backfield control",
+      lanes.backfield,
+      lanes.backfield
+        ? `${scarcityCopy(backfieldCount)} in the ${bucketFor(lanes.backfield).toLowerCase()} role. Start with who controls carries, passing work, and the goal line.`
+        : "No RB clears the published-role and roster guard. Use the RB tab if you are intentionally adding depth.",
+      backfieldCount,
     ));
-    const scarcityCount = scarcity ? counts.get(`${scarcity.position}::${bucketFor(scarcity)}`) ?? 0 : 0;
+    const receiverCount = lanes.receiver
+      ? counts.get(`${lanes.receiver.position}::${bucketFor(lanes.receiver)}`) ?? 0
+      : 0;
     primary.append(renderDecisionCard(
-      "Scarcity alert",
-      scarcity,
-      scarcity
-        ? `${scarcityCopy(scarcityCount)} in the ${bucketFor(scarcity).toLowerCase()} tier; the next role step-down is materially different.`
-        : "No distinct high-priority role is down to three or fewer players right now.",
-      scarcityCount,
+      "Target command",
+      lanes.receiver,
+      lanes.receiver
+        ? `${scarcityCopy(receiverCount)} in the ${bucketFor(lanes.receiver).toLowerCase()} role. Prefer command of a target tree over a famous secondary receiver.`
+        : "No WR clears the published-role and roster guard. Use the WR tab if you are intentionally adding depth.",
+      receiverCount,
     ));
-    const marketCount = marketFall ? counts.get(`${marketFall.position}::${bucketFor(marketFall)}`) ?? 0 : 0;
+    const otherCount = lanes.other
+      ? counts.get(`${lanes.other.position}::${bucketFor(lanes.other)}`) ?? 0
+      : 0;
     primary.append(renderDecisionCard(
-      "Market fall",
-      marketFall,
-      marketFall
-        ? `Still available ${Math.floor(currentPick - marketFall.adp)} picks after ESPN ADP. The role is shown so the fall is not mistaken for opportunity.`
-        : "No researched player is at least six picks past ESPN ADP after the first two signals are removed.",
-      marketCount,
+      "TE / QB edge",
+      lanes.other,
+      lanes.other
+        ? `${scarcityCopy(otherCount)} in the ${bucketFor(lanes.other).toLowerCase()} role. Treat this as a positional edge to compare, not the default first choice.`
+        : "No TE or QB clears the published-role and roster guard. The position tabs retain the full inventory.",
+      otherCount,
     ));
-
-    const alternatives = node("section", "alternatives-section");
-    const heading = node("header", "section-heading");
-    const headingCopy = node("div", "");
-    headingCopy.append(node("p", "eyebrow", "Cross-check"), node("h3", "", "Best researched role by position"));
-    heading.append(headingCopy, node("p", "section-note", "Role strength → security → offense → confidence. ESPN ADP breaks ties only."));
-    alternatives.append(heading);
-    const rows = node("div", "alternative-rows");
-    for (const position of ["RB", "WR", "TE", "QB", "K", "D/ST"]) {
-      const best = usable.filter((player) => player.position === position)
-        .sort((left, right) => roleIndex(left) - roleIndex(right) || compareWithinRole(left, right))[0];
-      if (best) rows.append(renderPlayerRow(best, { label: `${bucketFor(best)} · ${scarcityCopy(counts.get(`${position}::${bucketFor(best)}`) ?? 0)}` }));
-    }
-    if (!rows.childElementCount) rows.append(node("p", "empty-state", "No published role profiles are available yet."));
-    alternatives.append(rows);
-    dom.workspaceContent.replaceChildren(primary, alternatives);
+    dom.workspaceContent.replaceChildren(primary);
   }
 
   function renderRoleLedger(groups) {

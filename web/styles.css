@@ -198,12 +198,12 @@ main { width: min(1460px, 100%); margin: 0 auto; padding: 8px clamp(12px, 2.4vw,
 
 .decision-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, .78fr);
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
 .decision-card { min-width: 0; padding: 15px 16px 13px; border-right: 1px solid var(--line-soft); }
-.decision-card:last-child { border-right: 0; }
+.decision-card:last-child { border-right: 0; background: rgba(255, 255, 255, .012); }
 .decision-card-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
 .decision-kicker { margin-bottom: 5px; }
 .decision-card h3 { font-size: 1.02rem; }
@@ -354,7 +354,7 @@ footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 17px;
   main { padding: 8px 13px 30px; }
   .control-deck { grid-template-columns: 1fr; }
   .roster-summary { justify-content: flex-start; padding: 6px 8px; border-top: 1px solid var(--line-soft); }
-  .decision-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .decision-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, .78fr); }
   .decision-card { padding: 13px 12px 11px; }
   .decision-card-heading { display: block; }
   .decision-role { display: inline-block; margin-top: 6px; }
