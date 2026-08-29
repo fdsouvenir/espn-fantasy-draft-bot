@@ -255,6 +255,30 @@ export default {
       }
       const registry = env.COMPANION_REGISTRY.getByName("primary");
       if (url.pathname === "/api/v1/companion/register" && request.method === "POST") {
+        if (url.searchParams.get("resource") === "provision") {
+          routeLabel = "companion.provision";
+          if (!request.headers.get("content-type")?.startsWith("application/json")) {
+            throw new Error("invalid_content_type");
+          }
+          const token = bearerToken(request);
+          const deviceId = validateDeviceId(request.headers.get("X-Draftside-Device") ?? "");
+          const bytes = await readBoundedBody(request, MAX_INIT_BYTES);
+          const nonce = await verifyCompanionSignature(request, token, bytes);
+          const now = new Date().toISOString();
+          if (!await registry.authorizeDevice(
+            deviceId,
+            await sha256Hex(new TextEncoder().encode(token)),
+            now,
+          )) {
+            throw new Error("device_forbidden");
+          }
+          const body = validateInit(JSON.parse(new TextDecoder().decode(bytes)));
+          const result = await env.DRAFT_SESSION.getByName(body.draftKey)
+            .initializeDraft(body, nonce, now);
+          const draft = companionDraft(body, now);
+          if (!draft) throw new Error("invalid_draft_key");
+          return json({ ...result, draft: await registry.registerDraft(draft) }, 201);
+        }
         if (url.searchParams.get("resource") === "draft") {
           routeLabel = "companion.register.draft";
           requireSameOrigin(request);

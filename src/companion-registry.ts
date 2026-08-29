@@ -175,7 +175,8 @@ export class CompanionRegistry extends DurableObject<Env> {
         identity.leagueId === draft.leagueId
         && (identity.season === null || identity.season === draft.season)
       ))) {
-        matches.set(draft.draftKey, draft);
+        const leagueSeason = `${draft.season}:${draft.leagueId}`;
+        if (!matches.has(leagueSeason)) matches.set(leagueSeason, draft);
       }
     }
     return [...matches.values()];

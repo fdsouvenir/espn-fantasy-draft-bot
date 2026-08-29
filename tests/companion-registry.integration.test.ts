@@ -253,6 +253,53 @@ describe("companion device registry", () => {
     });
   });
 
+  it("lets an authorized device initialize a rescheduled draft and resolves only the newest board", async () => {
+    const replacementKey = "staging:espn:ffl:2026:123456789:1786494800000";
+    const pathname = "/api/v1/companion/register";
+    const bytes = new TextEncoder().encode(JSON.stringify(draftInit(replacementKey)));
+    const unknownHeaders = await signedCompanionHeaders(
+      pathname,
+      bytes,
+      "20000000-0000-4000-8000-000000000029",
+    );
+    unknownHeaders["X-Draftside-Device"] = OTHER_DEVICE_ID;
+    const unknown = await SELF.fetch(`http://worker.test${pathname}?resource=provision`, {
+      method: "POST",
+      headers: unknownHeaders,
+      body: bytes,
+    });
+    expect(unknown.status).toBe(403);
+
+    const initialized = await SELF.fetch(`http://worker.test${pathname}?resource=provision`, {
+      method: "POST",
+      headers: await signedCompanionHeaders(
+        pathname,
+        bytes,
+        "20000000-0000-4000-8000-000000000030",
+      ),
+      body: bytes,
+    });
+    expect(initialized.status).toBe(201);
+    expect(await initialized.json()).toMatchObject({
+      created: true,
+      draft: { draftKey: replacementKey, draftEpoch: 1786494800000 },
+    });
+
+    const resolved = await SELF.fetch("http://worker.test/api/v1/companion/resolve", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json",
+        "X-Draftside-Device": DEVICE_ID,
+      },
+      body: JSON.stringify({ rooms: [{ season: 2026, leagueId: "123456789" }] }),
+    });
+    expect(resolved.status).toBe(200);
+    expect(await resolved.json()).toMatchObject({
+      drafts: [{ draftKey: replacementKey }],
+    });
+  });
+
   it("authorizes companion HMAC ingestion and rejects unknown or revoked devices", async () => {
     const pathname = `/api/v1/drafts/${DRAFT_KEY}/companion-ingest`;
     const bytes = new TextEncoder().encode(JSON.stringify(ingestBatch()));
