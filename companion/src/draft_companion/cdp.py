@@ -30,7 +30,7 @@ DOM_BOARD_EXPRESSION = r"""(() => {
         const picks = props?.store?.draft?.picks;
         if (!Array.isArray(picks)) continue;
         return picks
-          .filter((pick) => pick && pick.playerId !== -1)
+          .filter((pick) => pick && Number.isInteger(pick.playerId) && pick.playerId !== -1)
           .map((pick) => ({
             pickNumber: pick.pickNumber,
             teamId: pick.teamId,

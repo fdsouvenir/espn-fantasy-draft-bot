@@ -1,3 +1,9 @@
+draftside-companion (0.4.5-1) unstable; urgency=high
+
+  * Never refresh ESPN's draft room while recovering a read-only stream.
+
+ -- Draftside Contributors <maintainers@draftside.dev>  Sat, 29 Aug 2026 12:15:00 -0500
+
 draftside-companion (0.4.4-1) unstable; urgency=medium
 
   * Recover and follow live picks from ESPN's rendered draft store when no socket opens.

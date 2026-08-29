@@ -231,7 +231,9 @@ class Companion:
                 self.sleeper(self.config.runtime.reconnect_seconds)
         if self.stopping:
             return None
-        reload_page = True
+        # Attaching must never disturb the user's live ESPN room. The rendered
+        # board snapshot provides catch-up without a page refresh.
+        reload_page = False
         while not self.stopping:
             source = None
             try:
@@ -648,7 +650,10 @@ class Companion:
                     self.sleeper(self.config.runtime.reconnect_seconds)
             except (OSError, RuntimeError, DecodeError, ValueError):
                 reconnects += 1
-                reload_draft_room = True
+                # Reattach to the read-only page after stream/DOM failures. A
+                # reload is disruptive during a live pick and cannot repair a
+                # bad board identity; the DOM snapshot will recover any gap.
+                reload_draft_room = False
                 self._health(
                     "reconnecting",
                     filledPicks=len(self.picks),

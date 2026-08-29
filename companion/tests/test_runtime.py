@@ -207,6 +207,37 @@ def test_worker_retry_does_not_reload_draft_room_again(tmp_path: Path, monkeypat
     assert reloads == [True, False]
 
 
+def test_stream_retry_reattaches_without_reloading_draft_room(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("draft_companion.runtime.signal.signal", lambda *_args: None)
+    reloads = []
+    runtime = None
+
+    class RetryFrames:
+        def __init__(self, _port, _url, reload_page):
+            reloads.append(reload_page)
+
+        def read(self, _wait):
+            if len(reloads) == 1:
+                raise RuntimeError("rendered board temporarily unavailable")
+            runtime.stop()
+            return []
+
+        def close(self):
+            pass
+
+    runtime = Companion(
+        config(tmp_path),
+        frame_factory=RetryFrames,
+        worker_factory=FakeWorker,
+        credential_loader=lambda *_args: Credentials("h" * 32, "id", "secret"),
+        sleeper=lambda _seconds: None,
+    )
+
+    runtime.run()
+
+    assert reloads == [True, False]
+
+
 def test_device_resolution_failure_keeps_runtime_and_chrome_open(tmp_path: Path):
     cfg = config(tmp_path)
     reloads = []
@@ -235,7 +266,7 @@ def test_device_resolution_failure_keeps_runtime_and_chrome_open(tmp_path: Path)
     runtime._health = lambda state, **fields: health_updates.append((state, fields))
 
     assert runtime._connect_device_draft(DeviceWorker()) is None
-    assert reloads == [True]
+    assert reloads == [False]
     assert health_updates[-1] == (
         "dashboard_unreachable",
         {
