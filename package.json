@@ -13,7 +13,7 @@
     "check": "npm run typegen && npm run typecheck && npm run lint && npm test && npm run test:python && node --check web/app.js && wrangler deploy --env staging --dry-run"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.8",
+    "@biomejs/biome": "^2.5.11",
     "@cloudflare/vitest-pool-workers": "^0.21.0",
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2",
