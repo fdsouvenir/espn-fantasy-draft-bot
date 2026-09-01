@@ -78,7 +78,7 @@ jobs:
           sudo apt-get purge -y draftside-companion
           test -f "$test_home/.config/draftside-companion/companion.toml"
           test ! -e /usr/bin/draftside-companion
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: draftside-companion-ubuntu-24.04-amd64
           path: |
